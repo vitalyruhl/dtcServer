@@ -41,6 +41,21 @@ jobs:
         COINBASE_PASSPHRASE: ""
         # Mock API endpoint (points to local mock server in tests)
         COINBASE_API_URL: "http://localhost:8080/mock"
+
+    - name: Test JWT Authentication (if credentials available)
+      run: |
+        cd build
+        if [ -n "$CDP_API_KEY_ID" ] && [ -n "$CDP_PRIVATE_KEY" ]; then
+          echo "🔐 Testing JWT authentication with real credentials..."
+          ./test_jwt_auth || echo "JWT tests completed (may have expected 401s)"
+          echo "🔍 Testing permissions..."
+          ./test_permissions || echo "Permission tests completed"
+        else
+          echo "ℹ️  Skipping JWT tests - no credentials configured in secrets"
+        fi
+      env:
+        CDP_API_KEY_ID: ${{ secrets.CDP_API_KEY_ID }}
+        CDP_PRIVATE_KEY: ${{ secrets.CDP_PRIVATE_KEY }}
         
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4

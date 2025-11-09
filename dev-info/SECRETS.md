@@ -1,7 +1,32 @@
 # GitHub Secrets Configuration
 
-This file documents the secrets needed for the GitHub Actions workflows.
+This file documents the secrets needed for GitHub Actions workflows and local development.
 **DO NOT commit actual secret values to this file!**
+
+## Coinbase API Credentials (Local Development)
+
+### JWT Authentication (CDP Advanced Trade API)
+For local development and testing, create these files in the `secrets/` directory:
+
+```
+secrets/
+├── cdp_api_key.json     # CDP API credentials (JSON format)
+└── coinbase.h           # Legacy format (if needed)
+```
+
+**Example `secrets/cdp_api_key.json`:**
+```json
+{
+    "id": "your-cdp-api-key-id",
+    "privateKey": "-----BEGIN EC PRIVATE KEY-----\nYour ECDSA P-256 private key\n-----END EC PRIVATE KEY-----"
+}
+```
+
+**Security Requirements:**
+- Use ECDSA P-256 private keys (not Ed25519)
+- Store private key in PEM format
+- The `secrets/` directory is gitignored for security
+- Use environment variables for production: `CDP_API_KEY_ID` and `CDP_PRIVATE_KEY`
 
 ## Required Secrets for CI/CD
 

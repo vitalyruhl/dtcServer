@@ -7,10 +7,25 @@
 
 **👋 Welcome to the Coinbase DTC Core Discussions!**
 
-We’re using Discussions as a central place to connect with the community: ask questions, share ideas, get help, and collaborate on the project. Please use the appropriate category (see below) to keep everything organized.
+**🚀 Current Status**: JWT authentication is working! We have API connectivity and Docker deployment ready. The core DTC protocol integration is the next major milestone.
+
+We're using Discussions as a central place to connect with the community: ask questions, share ideas, get help, and collaborate on the project. Please use the appropriate category (see below) to keep everything organized.
+
+### What's Working Now
+- ✅ Coinbase API connectivity (all public endpoints)
+- ✅ JWT authentication (ES256/ECDSA for Advanced Trade API)
+- ✅ Cross-platform builds (Windows MSVC + Linux GCC)
+- ✅ Docker containerization (multi-stage builds)
+- ✅ Credential management (multiple formats)
+
+### What We're Building Next
+- ❌ DTC protocol message structures
+- ❌ Real-time WebSocket market data feeds
+- ❌ Coinbase → DTC message translation
+- ❌ DTC server implementation
 
 ### Introduce Yourself
-Write one sentence about who you are and what you want to do with the project (e.g., “I’m using this to feed Coinbase market data into Sierra Chart”).
+Write one sentence about who you are and what you want to do with the project (e.g., "I'm using this to feed Coinbase market data into Sierra Chart via DTC protocol").
 
 ### What Discussions Are For
 - Questions about usage or installation

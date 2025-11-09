@@ -75,7 +75,10 @@ cmake --build build
 # Run the server
 ./build/coinbase_dtc_server
 
-# Run tests
+# Run JWT authentication tests (requires CDP credentials)
+./build/test_jwt_auth
+
+# Run all tests
 ./build/coinbase_dtc_core_tests
 
 # Quick rebuild and run
@@ -91,6 +94,8 @@ apt-get update && apt-get install -y \
     nlohmann-json3-dev \
     libssl-dev \
     pkg-config
+
+# JWT-cpp is automatically built from source (v0.7.1) for ES256/ECDSA authentication
 
 # For debugging tools
 apt-get install -y gdb valgrind

@@ -1,5 +1,20 @@
-# Commands to generate SSH key for GitHub Actions
-# Run these on your local machine (Git Bash, PowerShell, or Command Prompt)
+# SSH Setup for Server Deployment (Optional/Legacy)
+
+> **⚠️ NOTE**: With Docker containerization working, SSH-based deployment is now optional. Most users should use Docker containers directly via `docker-compose` or container orchestration platforms.
+
+This file documents SSH key setup for traditional server deployment via GitHub Actions.
+**Use this only if you need to deploy directly to a remote server via SSH.**
+
+## Modern Alternatives (Recommended)
+
+- **Docker Hub**: Push containers to registry, pull on server
+- **Container Platforms**: Use Kubernetes, Docker Swarm, or cloud container services  
+- **GitHub Container Registry**: `ghcr.io` for container distribution
+
+## SSH Key Setup (Traditional Deployment)
+
+Commands to generate SSH key for GitHub Actions server deployment:
+Run these on your local machine (Git Bash, PowerShell, or Command Prompt)
 
 # Generate SSH key pair
 ssh-keygen -t rsa -b 4096 -f github_actions_key -C "github-actions@coinbase-dtc-core"
