@@ -1,0 +1,55 @@
+# Build directories
+/build/
+/bin/
+/out/
+/CMakeFiles/
+
+# CMake generated files
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Compiled object files
+*.o
+*.obj
+*.lo
+*.lai
+*.Plo
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Libraries
+*.a
+*.lib
+*.dll
+*.so
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Debug / Profiling
+*.swp
+*.swo
+*.gcno
+*.gcda
+*.gcov
+*.prof
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# VSCode settings
+.vscode/
+
+# Logs
+*.log
+
+# Cache
+.cache/
