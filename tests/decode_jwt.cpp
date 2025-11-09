@@ -43,7 +43,16 @@ int main() {
             std::cout << "\n📋 Payload:" << std::endl;
             std::cout << "   Issuer: " << decoded_token.get_issuer() << std::endl;
             std::cout << "   Subject: " << decoded_token.get_subject() << std::endl;
-            std::cout << "   Audience: " << decoded_token.get_audience() << std::endl;
+            
+            // Print audience set
+            auto audience = decoded_token.get_audience();
+            std::cout << "   Audience: [";
+            for (auto it = audience.begin(); it != audience.end(); ++it) {
+                if (it != audience.begin()) std::cout << ", ";
+                std::cout << *it;
+            }
+            std::cout << "]" << std::endl;
+            
             std::cout << "   Issued At: " << decoded_token.get_issued_at().time_since_epoch().count() << std::endl;
             std::cout << "   Expires At: " << decoded_token.get_expires_at().time_since_epoch().count() << std::endl;
             std::cout << "   Not Before: " << decoded_token.get_not_before().time_since_epoch().count() << std::endl;
