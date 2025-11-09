@@ -2,6 +2,13 @@
 #include <iostream>
 #include <curl/curl.h>
 
+// Callback function for CURL to write response data
+static size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::string* userp) {
+    size_t total_size = size * nmemb;
+    userp->append((char*)contents, total_size);
+    return total_size;
+}
+
 int main() {
     std::cout << "🔍 Detailed JWT Diagnostic Test..." << std::endl;
 
@@ -76,10 +83,7 @@ int main() {
 
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, [](void* contents, size_t size, size_t nmemb, std::string* userp) -> size_t {
-            userp->append((char*)contents, size * nmemb);
-            return size * nmemb;
-        });
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
         curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L); // Enable verbose output
@@ -89,7 +93,7 @@ int main() {
         std::cout << "   Auth Header: " << auth_header.substr(0, 50) << "..." << std::endl;
 
         CURLcode res = curl_easy_perform(curl);
-        long status_code;
+        long status_code = 0;
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
 
         std::cout << "\n📥 Response:" << std::endl;
@@ -100,8 +104,13 @@ int main() {
             std::cout << "❌ Request failed: " << curl_easy_strerror(res) << std::endl;
         }
 
-        curl_slist_free_all(headers);
-        curl_easy_cleanup(curl);
+        // Clean up curl resources safely
+        if (headers) {
+            curl_slist_free_all(headers);
+        }
+        if (curl) {
+            curl_easy_cleanup(curl);
+        }
 
     } catch (const std::exception& e) {
         std::cout << "❌ Test failed: " << e.what() << std::endl;
