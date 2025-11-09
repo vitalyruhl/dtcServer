@@ -16,17 +16,19 @@ COPY . .
 
 # Build the project
 RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-RUN cmake --build build --config Release
+RUN cmake --build build --parallel $(nproc)
 
 # Runtime stage - smaller image
 FROM ubuntu:22.04 AS runtime
 
-# Install runtime dependencies (if any)
+# Install minimal runtime dependencies
 RUN apt-get update && apt-get install -y \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy built executable from builder stage
-COPY --from=builder /app/build/coinbase_dtc_server /usr/local/bin/
+COPY --from=builder /app/build/coinbase_dtc_server /usr/local/bin/coinbase_dtc_server
+RUN chmod +x /usr/local/bin/coinbase_dtc_server
 
 # Create non-root user for security
 RUN useradd -r -s /bin/false coinbase
@@ -38,4 +40,4 @@ USER coinbase
 EXPOSE 8080
 
 # Run the server
-CMD ["coinbase_dtc_server"]
+CMD ["/usr/local/bin/coinbase_dtc_server"]

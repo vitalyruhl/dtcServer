@@ -62,14 +62,24 @@ jobs:
         tags: coinbase-dtc-core:latest
         cache-from: type=gha
         cache-to: type=gha,mode=max
+        load: true  # Load the image locally for testing
 
     - name: Test Docker container
       run: |
-        docker run --rm -d --name test-container coinbase-dtc-core:latest
-        sleep 5
-        # Add any container health checks here
-        docker logs test-container
-        docker stop test-container
+        # Run the container and capture output
+        echo "Testing Docker container..."
+        docker run --rm coinbase-dtc-core:latest > container_output.log 2>&1 || true
+        
+        # Check if output contains expected messages
+        if grep -q "coinbase_dtc_server starting" container_output.log; then
+          echo "✅ Container test passed - found expected startup message"
+          cat container_output.log
+        else
+          echo "❌ Container test failed - startup message not found"
+          echo "Container output:"
+          cat container_output.log
+          exit 1
+        fi
 
   # Optional: Deploy to server
   deploy:
