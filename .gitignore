@@ -53,3 +53,12 @@ Thumbs.db
 
 # Cache
 .cache/
+
+# API Secrets and Credentials
+secrets/
+!secrets/*.template
+!secrets/README.md
+
+# CDP API Keys (extra protection)
+**/cdp_api_key.json
+**/cdp_*.json

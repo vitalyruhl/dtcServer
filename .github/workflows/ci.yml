@@ -33,6 +33,14 @@ jobs:
       run: |
         cd build
         ctest --output-on-failure --verbose
+      env:
+        # Test mode configuration
+        COINBASE_TEST_MODE: "mock"           # Enable mock mode for testing
+        COINBASE_API_KEY: ""                 # Empty = public/mock mode
+        COINBASE_API_SECRET: ""
+        COINBASE_PASSPHRASE: ""
+        # Mock API endpoint (points to local mock server in tests)
+        COINBASE_API_URL: "http://localhost:8080/mock"
         
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
