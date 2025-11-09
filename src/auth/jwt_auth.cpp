@@ -90,26 +90,19 @@ std::string JWTAuthenticator::generate_token(
     auto exp = now + TOKEN_LIFETIME;
     
     // Create JWT token with ES256 algorithm (ECDSA - required for Coinbase Advanced Trade)
+    // Format: Coinbase updated format as of April 2024 - removed audience claim
+    std::string uri = method + " api.coinbase.com" + path;  // Full URI format
+    
     auto token = jwt::create<json_traits>()
         .set_algorithm("ES256")  // ES256 required for Advanced Trade API
         .set_type("JWT")
         .set_key_id(credentials_.key_id)
-        .set_issuer("cdp")
-        .set_subject(credentials_.key_id)
-        .set_audience("coinbase")
-        .set_issued_at(now)
-        .set_expires_at(exp)
-        .set_not_before(now)
-        .set_payload_claim("nonce", jwt_utils::generate_nonce())
-        .set_payload_claim("method", method)
-        .set_payload_claim("uri", path);
-    
-    // Add body hash if body is provided
-    if (!body.empty()) {
-        // For CDP, we typically don't hash the body, but include it as a claim
-        // This may need adjustment based on actual CDP requirements
-        token.set_payload_claim("body", body);
-    }
+        .set_header_claim("nonce", jwt_utils::generate_nonce())  // Nonce in header
+        .set_issuer("cdp")           // Required: CDP issuer
+        .set_subject(credentials_.key_id)  // Required: API key ID
+        .set_not_before(now)         // Required: Not before timestamp
+        .set_expires_at(exp)         // Required: Expiration (2 minutes)
+        .set_payload_claim("uri", uri);  // Required: Full URI format
     
     // Sign with ES256 (ECDSA) private key - required for Advanced Trade API
     std::string signing_key = credentials_.private_key;

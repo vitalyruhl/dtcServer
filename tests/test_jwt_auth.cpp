@@ -105,7 +105,7 @@ int main() {
         
         // Test 2: Try to load from JSON file  
         try {
-            // Try ECDSA key first
+            // Try ECDSA key first (current/recommended)
             auto file_creds = coinbase_dtc_core::auth::CDPCredentials::from_json_file("secrets/cdp_api_key_ECDSA.json");
             if (file_creds.is_valid()) {
                 std::cout << "✅ Loaded ECDSA credentials from JSON file" << std::endl;
@@ -116,19 +116,20 @@ int main() {
         } catch (const std::exception& e1) {
             std::cout << "ℹ️  Could not load ECDSA key: " << e1.what() << std::endl;
             
-            // Fallback to Ed25519 key (if exists)
+            // Fallback to default path (legacy/Ed25519 key)
             try {
                 auto file_creds = coinbase_dtc_core::auth::CDPCredentials::from_json_file("secrets/cdp_api_key.json");
                 if (file_creds.is_valid()) {
-                    std::cout << "⚠️  Loaded Ed25519 credentials (will likely fail for Advanced Trade)" << std::endl;
+                    std::cout << "⚠️  Loaded legacy credentials (may not work with Advanced Trade)" << std::endl;
                     std::cout << "   Key ID: " << file_creds.key_id << std::endl;
                     std::cout << "   Private key: " << (file_creds.private_key.length() > 0 ? "[PRESENT]" : "[MISSING]") << std::endl;
                     env_creds = file_creds;
                 }
             } catch (const std::exception& e2) {
                 std::cout << "ℹ️  No valid credentials found in JSON files" << std::endl;
-                std::cout << "   Expected: secrets/cdp_api_key_ECDSA.json (preferred) or secrets/cdp_api_key.json" << std::endl;
-                std::cout << "   Template available: secrets/cdp_api_key.json.template" << std::endl;
+                std::cout << "   Expected: secrets/cdp_api_key_ECDSA.json (preferred)" << std::endl;
+                std::cout << "   Fallback: secrets/cdp_api_key.json (legacy)" << std::endl;
+                std::cout << "   Template: secrets/cdp_api_key.json.template" << std::endl;
             }
         }
         

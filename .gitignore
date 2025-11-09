@@ -88,9 +88,10 @@ Thumbs.db
 .cache/
 
 # API Secrets and Credentials
-secrets/
+secrets/*.json
 !secrets/*.template
 !secrets/README.md
+!secrets/coinbase.h
 
 # CDP API Keys (extra protection)
 **/cdp_api_key.json

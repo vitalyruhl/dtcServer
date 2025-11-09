@@ -128,6 +128,96 @@ if (BUILD_TESTING AND ENABLE_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/settings
     )
     
+    # API Permissions test
+    add_executable(test_permissions
+        tests/test_permissions.cpp
+    )
+    target_link_libraries(test_permissions PRIVATE coinbase_dtc_core)
+    
+    target_include_directories(test_permissions PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
+    # JWT Debug test  
+    add_executable(test_jwt_debug
+        tests/test_jwt_debug.cpp
+    )
+    target_link_libraries(test_jwt_debug PRIVATE coinbase_dtc_core)
+    
+    target_include_directories(test_jwt_debug PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
+    # View Permissions test  
+    add_executable(test_view_permissions
+        tests/test_view_permissions.cpp
+    )
+    target_link_libraries(test_view_permissions PRIVATE coinbase_dtc_core)
+    
+    target_include_directories(test_view_permissions PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
+    # Simple Auth test  
+    add_executable(test_simple_auth
+        tests/test_simple_auth.cpp
+    )
+    target_link_libraries(test_simple_auth PRIVATE coinbase_dtc_core)
+    
+    target_include_directories(test_simple_auth PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
+    # Environment test  
+    add_executable(test_environment
+        tests/test_environment.cpp
+    )
+    target_link_libraries(test_environment PRIVATE coinbase_dtc_core)
+    
+    target_include_directories(test_environment PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
+    # Token extractor  
+    add_executable(extract_token
+        tests/extract_token.cpp
+    )
+    target_link_libraries(extract_token PRIVATE coinbase_dtc_core)
+    
+    target_include_directories(extract_token PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
+    # JWT decoder  
+    add_executable(decode_jwt
+        tests/decode_jwt.cpp
+    )
+    target_link_libraries(decode_jwt PRIVATE coinbase_dtc_core)
+    
+    target_include_directories(decode_jwt PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
+    # Extract permissions token
+    add_executable(extract_permissions_token
+        tests/extract_permissions_token.cpp
+    )
+    target_link_libraries(extract_permissions_token PRIVATE coinbase_dtc_core)
+    
+    target_include_directories(extract_permissions_token PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
     add_test(NAME advanced_trade_api COMMAND test_advanced_trade_api)
     add_test(NAME jwt_auth COMMAND test_jwt_auth)
+    add_test(NAME permissions COMMAND test_permissions)
+    add_test(NAME jwt_debug COMMAND test_jwt_debug)
 endif()
