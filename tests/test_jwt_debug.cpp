@@ -6,10 +6,17 @@ int main() {
     std::cout << "🔍 Detailed JWT Diagnostic Test..." << std::endl;
 
     try {
-        // Load credentials
-        auto creds = coinbase_dtc_core::auth::CDPCredentials::from_json_file("secrets/cdp_api_key_ECDSA.json");
+        // Load credentials - try environment variables first, then files
+        auto creds = coinbase_dtc_core::auth::CDPCredentials::from_environment();
+        if (!creds.is_valid()) {
+            // Fallback to JSON file
+            creds = coinbase_dtc_core::auth::CDPCredentials::from_json_file("secrets/cdp_api_key_ECDSA.json");
+        }
+        
         if (!creds.is_valid()) {
             std::cout << "❌ No valid credentials found!" << std::endl;
+            std::cout << "   Try setting environment variables CDP_API_KEY_ID and CDP_PRIVATE_KEY" << std::endl;
+            std::cout << "   Or provide secrets/cdp_api_key_ECDSA.json file" << std::endl;
             return 1;
         }
 
