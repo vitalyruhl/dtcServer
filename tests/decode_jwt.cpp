@@ -2,6 +2,14 @@
 #include <iostream>
 #include <jwt-cpp/jwt.h>
 
+#ifdef HAS_NLOHMANN_JSON  
+#include <jwt-cpp/traits/nlohmann-json/traits.h>
+using json_traits = jwt::traits::nlohmann_json;
+#else
+// Use default picojson traits if nlohmann is not available
+using json_traits = jwt::traits::picojson;
+#endif
+
 int main() {
     try {
         // Load credentials
@@ -25,7 +33,7 @@ int main() {
         
         try {
             // Decode without verification to inspect claims
-            auto decoded_token = jwt::decode<jwt::traits::nlohmann_json>(jwt_token);
+            auto decoded_token = jwt::decode<json_traits>(jwt_token);
             
             std::cout << "\n📋 Header:" << std::endl;
             std::cout << "   Algorithm: " << decoded_token.get_algorithm() << std::endl;
