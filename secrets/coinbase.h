@@ -31,7 +31,7 @@ const std::string COINBASE_PASSPHRASE = "";                 // Your passphrase (
 
 // Coinbase Developer Platform (CDP) credentials (newer format)
 // These are loaded from cdp_api_key_ECDSA.json file in this folder
-const std::string CDP_JSON_FILE_PATH = "secrets/cdp_api_key_ECDSA.json";
+const std::string CDP_JSON_FILE_PATH = "secrets/cdp_api_key_ECDSA.json"; // you can download it from Coinbase on API key creation. NOTE You need to change format to ECDSA on creation!
 
 // Manual CDP credentials (if not using JSON file)
 const std::string CDP_API_KEY_ID = "";                      // CDP API Key ID
