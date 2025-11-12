@@ -78,14 +78,20 @@ struct LogonRequest : public DTCMessage {
     char general_text_data[128];
     
     LogonRequest() : protocol_version(DTC_PROTOCOL_VERSION) {
-        header = MessageHeader(sizeof(LogonRequest), MessageType::LOGON_REQUEST);
+        // Calculate actual data size without vtable
+        uint16_t data_size = sizeof(MessageHeader) + sizeof(protocol_version) + 
+                            sizeof(username) + sizeof(password) + sizeof(general_text_data);
+        header = MessageHeader(data_size, MessageType::LOGON_REQUEST);
         memset(username, 0, sizeof(username));
         memset(password, 0, sizeof(password));
         memset(general_text_data, 0, sizeof(general_text_data));
     }
     
     MessageType get_type() const override { return MessageType::LOGON_REQUEST; }
-    uint16_t get_size() const override { return sizeof(LogonRequest); }
+    uint16_t get_size() const override { 
+        return sizeof(MessageHeader) + sizeof(protocol_version) + 
+               sizeof(username) + sizeof(password) + sizeof(general_text_data);
+    }
     std::vector<uint8_t> serialize() const override;
     bool deserialize(const uint8_t* data, uint16_t size) override;
 };
@@ -102,13 +108,18 @@ struct LogonResponse : public DTCMessage {
     uint32_t integer_to_float_price_divisor;
     
     LogonResponse() : protocol_version(DTC_PROTOCOL_VERSION), result(0), integer_to_float_price_divisor(1) {
-        header = MessageHeader(sizeof(LogonResponse), MessageType::LOGON_RESPONSE);
+        uint16_t data_size = sizeof(MessageHeader) + sizeof(protocol_version) + sizeof(result) + 
+                            sizeof(result_text) + sizeof(reconnect_address) + sizeof(integer_to_float_price_divisor);
+        header = MessageHeader(data_size, MessageType::LOGON_RESPONSE);
         memset(result_text, 0, sizeof(result_text));
         memset(reconnect_address, 0, sizeof(reconnect_address));
     }
     
     MessageType get_type() const override { return MessageType::LOGON_RESPONSE; }
-    uint16_t get_size() const override { return sizeof(LogonResponse); }
+    uint16_t get_size() const override { 
+        return sizeof(MessageHeader) + sizeof(protocol_version) + sizeof(result) + 
+               sizeof(result_text) + sizeof(reconnect_address) + sizeof(integer_to_float_price_divisor);
+    }
     std::vector<uint8_t> serialize() const override;
     bool deserialize(const uint8_t* data, uint16_t size) override;
 };
@@ -123,12 +134,17 @@ struct MarketDataRequest : public DTCMessage {
     char symbol[64];
     
     MarketDataRequest() : request_action(1), symbol_id(0) {
-        header = MessageHeader(sizeof(MarketDataRequest), MessageType::MARKET_DATA_REQUEST);
+        uint16_t data_size = sizeof(MessageHeader) + sizeof(request_action) + 
+                            sizeof(symbol_id) + sizeof(symbol);
+        header = MessageHeader(data_size, MessageType::MARKET_DATA_REQUEST);
         memset(symbol, 0, sizeof(symbol));
     }
     
     MessageType get_type() const override { return MessageType::MARKET_DATA_REQUEST; }
-    uint16_t get_size() const override { return sizeof(MarketDataRequest); }
+    uint16_t get_size() const override { 
+        return sizeof(MessageHeader) + sizeof(request_action) + 
+               sizeof(symbol_id) + sizeof(symbol);
+    }
     std::vector<uint8_t> serialize() const override;
     bool deserialize(const uint8_t* data, uint16_t size) override;
 };
@@ -144,11 +160,16 @@ struct MarketDataUpdateTrade : public DTCMessage {
     uint64_t date_time;  // Unix timestamp
     
     MarketDataUpdateTrade() : symbol_id(0), price(0.0), volume(0.0), date_time(0) {
-        header = MessageHeader(sizeof(MarketDataUpdateTrade), MessageType::MARKET_DATA_UPDATE_TRADE);
+        uint16_t data_size = sizeof(MessageHeader) + sizeof(symbol_id) + 
+                            sizeof(price) + sizeof(volume) + sizeof(date_time);
+        header = MessageHeader(data_size, MessageType::MARKET_DATA_UPDATE_TRADE);
     }
     
     MessageType get_type() const override { return MessageType::MARKET_DATA_UPDATE_TRADE; }
-    uint16_t get_size() const override { return sizeof(MarketDataUpdateTrade); }
+    uint16_t get_size() const override { 
+        return sizeof(MessageHeader) + sizeof(symbol_id) + 
+               sizeof(price) + sizeof(volume) + sizeof(date_time);
+    }
     std::vector<uint8_t> serialize() const override;
     bool deserialize(const uint8_t* data, uint16_t size) override;
 };
@@ -167,11 +188,18 @@ struct MarketDataUpdateBidAsk : public DTCMessage {
     
     MarketDataUpdateBidAsk() : symbol_id(0), bid_price(0.0), bid_quantity(0.0), 
                               ask_price(0.0), ask_quantity(0.0), date_time(0) {
-        header = MessageHeader(sizeof(MarketDataUpdateBidAsk), MessageType::MARKET_DATA_UPDATE_BID_ASK);
+        uint16_t data_size = sizeof(MessageHeader) + sizeof(symbol_id) + 
+                            sizeof(bid_price) + sizeof(bid_quantity) + 
+                            sizeof(ask_price) + sizeof(ask_quantity) + sizeof(date_time);
+        header = MessageHeader(data_size, MessageType::MARKET_DATA_UPDATE_BID_ASK);
     }
     
     MessageType get_type() const override { return MessageType::MARKET_DATA_UPDATE_BID_ASK; }
-    uint16_t get_size() const override { return sizeof(MarketDataUpdateBidAsk); }
+    uint16_t get_size() const override { 
+        return sizeof(MessageHeader) + sizeof(symbol_id) + 
+               sizeof(bid_price) + sizeof(bid_quantity) + 
+               sizeof(ask_price) + sizeof(ask_quantity) + sizeof(date_time);
+    }
     std::vector<uint8_t> serialize() const override;
     bool deserialize(const uint8_t* data, uint16_t size) override;
 };

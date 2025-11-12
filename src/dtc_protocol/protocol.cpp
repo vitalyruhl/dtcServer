@@ -41,7 +41,9 @@ std::vector<uint8_t> LogonRequest::serialize() const {
 }
 
 bool LogonRequest::deserialize(const uint8_t* data, uint16_t size) {
-    if (size < sizeof(LogonRequest)) return false;
+    uint16_t expected_size = sizeof(MessageHeader) + sizeof(protocol_version) + 
+                            sizeof(username) + sizeof(password) + sizeof(general_text_data);
+    if (size < expected_size) return false;
     
     // Safely copy field by field to avoid vtable corruption
     size_t offset = 0;
@@ -63,62 +65,191 @@ bool LogonRequest::deserialize(const uint8_t* data, uint16_t size) {
 }
 
 std::vector<uint8_t> LogonResponse::serialize() const {
-    // Update header before serialization
-    const_cast<LogonResponse*>(this)->header = MessageHeader(sizeof(LogonResponse), MessageType::LOGON_RESPONSE);
+    // Create a fresh header with correct size
+    uint16_t data_size = sizeof(MessageHeader) + sizeof(protocol_version) + sizeof(result) + 
+                        sizeof(result_text) + sizeof(reconnect_address) + sizeof(integer_to_float_price_divisor);
+    MessageHeader fresh_header(data_size, MessageType::LOGON_RESPONSE);
     
-    std::vector<uint8_t> buffer(sizeof(LogonResponse));
-    memcpy(buffer.data(), this, sizeof(LogonResponse));
+    std::vector<uint8_t> buffer(data_size);
+    
+    // Copy header
+    memcpy(buffer.data(), &fresh_header, sizeof(MessageHeader));
+    
+    // Copy fields
+    size_t offset = sizeof(MessageHeader);
+    memcpy(buffer.data() + offset, &protocol_version, sizeof(protocol_version));
+    offset += sizeof(protocol_version);
+    memcpy(buffer.data() + offset, &result, sizeof(result));
+    offset += sizeof(result);
+    memcpy(buffer.data() + offset, result_text, sizeof(result_text));
+    offset += sizeof(result_text);
+    memcpy(buffer.data() + offset, reconnect_address, sizeof(reconnect_address));
+    offset += sizeof(reconnect_address);
+    memcpy(buffer.data() + offset, &integer_to_float_price_divisor, sizeof(integer_to_float_price_divisor));
+    
     return buffer;
 }
 
 bool LogonResponse::deserialize(const uint8_t* data, uint16_t size) {
-    if (size < sizeof(LogonResponse)) return false;
-    memcpy(this, data, sizeof(LogonResponse));
+    uint16_t expected_size = sizeof(MessageHeader) + sizeof(protocol_version) + sizeof(result) + 
+                            sizeof(result_text) + sizeof(reconnect_address) + sizeof(integer_to_float_price_divisor);
+    if (size < expected_size) return false;
+    
+    // Safely copy field by field
+    size_t offset = 0;
+    memcpy(&header, data + offset, sizeof(header));
+    offset += sizeof(header);
+    memcpy(&protocol_version, data + offset, sizeof(protocol_version));
+    offset += sizeof(protocol_version);
+    memcpy(&result, data + offset, sizeof(result));
+    offset += sizeof(result);
+    memcpy(result_text, data + offset, sizeof(result_text));
+    offset += sizeof(result_text);
+    memcpy(reconnect_address, data + offset, sizeof(reconnect_address));
+    offset += sizeof(reconnect_address);
+    memcpy(&integer_to_float_price_divisor, data + offset, sizeof(integer_to_float_price_divisor));
+    
     return true;
 }
 
 std::vector<uint8_t> MarketDataRequest::serialize() const {
-    // Update header before serialization
-    const_cast<MarketDataRequest*>(this)->header = MessageHeader(sizeof(MarketDataRequest), MessageType::MARKET_DATA_REQUEST);
+    // Create a fresh header
+    MessageHeader fresh_header(sizeof(MarketDataRequest), MessageType::MARKET_DATA_REQUEST);
     
     std::vector<uint8_t> buffer(sizeof(MarketDataRequest));
-    memcpy(buffer.data(), this, sizeof(MarketDataRequest));
+    
+    // Copy header
+    memcpy(buffer.data(), &fresh_header, sizeof(MessageHeader));
+    
+    // Copy fields
+    size_t offset = sizeof(MessageHeader);
+    memcpy(buffer.data() + offset, &request_action, sizeof(request_action));
+    offset += sizeof(request_action);
+    
+    memcpy(buffer.data() + offset, &symbol_id, sizeof(symbol_id));
+    offset += sizeof(symbol_id);
+    
+    memcpy(buffer.data() + offset, symbol, sizeof(symbol));
+    
     return buffer;
 }
 
 bool MarketDataRequest::deserialize(const uint8_t* data, uint16_t size) {
-    if (size < sizeof(MarketDataRequest)) return false;
-    memcpy(this, data, sizeof(MarketDataRequest));
+    uint16_t expected_size = sizeof(MessageHeader) + sizeof(request_action) + 
+                            sizeof(symbol_id) + sizeof(symbol);
+    if (size < expected_size) return false;
+    
+    // Safely copy field by field to avoid vtable corruption
+    size_t offset = 0;
+    memcpy(&header, data + offset, sizeof(header));
+    offset += sizeof(header);
+    
+    memcpy(&request_action, data + offset, sizeof(request_action));
+    offset += sizeof(request_action);
+    
+    memcpy(&symbol_id, data + offset, sizeof(symbol_id));
+    offset += sizeof(symbol_id);
+    
+    memcpy(symbol, data + offset, sizeof(symbol));
+    
     return true;
 }
 
 std::vector<uint8_t> MarketDataUpdateTrade::serialize() const {
-    // Update header before serialization
-    const_cast<MarketDataUpdateTrade*>(this)->header = MessageHeader(sizeof(MarketDataUpdateTrade), MessageType::MARKET_DATA_UPDATE_TRADE);
+    // Create a fresh header with correct size
+    uint16_t data_size = sizeof(MessageHeader) + sizeof(symbol_id) + 
+                        sizeof(price) + sizeof(volume) + sizeof(date_time);
+    MessageHeader fresh_header(data_size, MessageType::MARKET_DATA_UPDATE_TRADE);
     
-    std::vector<uint8_t> buffer(sizeof(MarketDataUpdateTrade));
-    memcpy(buffer.data(), this, sizeof(MarketDataUpdateTrade));
+    std::vector<uint8_t> buffer(data_size);
+    
+    // Copy header
+    memcpy(buffer.data(), &fresh_header, sizeof(MessageHeader));
+    
+    // Copy fields
+    size_t offset = sizeof(MessageHeader);
+    memcpy(buffer.data() + offset, &symbol_id, sizeof(symbol_id));
+    offset += sizeof(symbol_id);
+    memcpy(buffer.data() + offset, &price, sizeof(price));
+    offset += sizeof(price);
+    memcpy(buffer.data() + offset, &volume, sizeof(volume));
+    offset += sizeof(volume);
+    memcpy(buffer.data() + offset, &date_time, sizeof(date_time));
+    
     return buffer;
 }
 
 bool MarketDataUpdateTrade::deserialize(const uint8_t* data, uint16_t size) {
-    if (size < sizeof(MarketDataUpdateTrade)) return false;
-    memcpy(this, data, sizeof(MarketDataUpdateTrade));
+    uint16_t expected_size = sizeof(MessageHeader) + sizeof(symbol_id) + 
+                            sizeof(price) + sizeof(volume) + sizeof(date_time);
+    if (size < expected_size) return false;
+    
+    // Safely copy field by field
+    size_t offset = 0;
+    memcpy(&header, data + offset, sizeof(header));
+    offset += sizeof(header);
+    memcpy(&symbol_id, data + offset, sizeof(symbol_id));
+    offset += sizeof(symbol_id);
+    memcpy(&price, data + offset, sizeof(price));
+    offset += sizeof(price);
+    memcpy(&volume, data + offset, sizeof(volume));
+    offset += sizeof(volume);
+    memcpy(&date_time, data + offset, sizeof(date_time));
+    
     return true;
 }
 
 std::vector<uint8_t> MarketDataUpdateBidAsk::serialize() const {
-    // Update header before serialization
-    const_cast<MarketDataUpdateBidAsk*>(this)->header = MessageHeader(sizeof(MarketDataUpdateBidAsk), MessageType::MARKET_DATA_UPDATE_BID_ASK);
+    // Create a fresh header with correct size
+    uint16_t data_size = sizeof(MessageHeader) + sizeof(symbol_id) + 
+                        sizeof(bid_price) + sizeof(bid_quantity) + 
+                        sizeof(ask_price) + sizeof(ask_quantity) + sizeof(date_time);
+    MessageHeader fresh_header(data_size, MessageType::MARKET_DATA_UPDATE_BID_ASK);
     
-    std::vector<uint8_t> buffer(sizeof(MarketDataUpdateBidAsk));
-    memcpy(buffer.data(), this, sizeof(MarketDataUpdateBidAsk));
+    std::vector<uint8_t> buffer(data_size);
+    
+    // Copy header
+    memcpy(buffer.data(), &fresh_header, sizeof(MessageHeader));
+    
+    // Copy fields
+    size_t offset = sizeof(MessageHeader);
+    memcpy(buffer.data() + offset, &symbol_id, sizeof(symbol_id));
+    offset += sizeof(symbol_id);
+    memcpy(buffer.data() + offset, &bid_price, sizeof(bid_price));
+    offset += sizeof(bid_price);
+    memcpy(buffer.data() + offset, &bid_quantity, sizeof(bid_quantity));
+    offset += sizeof(bid_quantity);
+    memcpy(buffer.data() + offset, &ask_price, sizeof(ask_price));
+    offset += sizeof(ask_price);
+    memcpy(buffer.data() + offset, &ask_quantity, sizeof(ask_quantity));
+    offset += sizeof(ask_quantity);
+    memcpy(buffer.data() + offset, &date_time, sizeof(date_time));
+    
     return buffer;
 }
 
 bool MarketDataUpdateBidAsk::deserialize(const uint8_t* data, uint16_t size) {
-    if (size < sizeof(MarketDataUpdateBidAsk)) return false;
-    memcpy(this, data, sizeof(MarketDataUpdateBidAsk));
+    uint16_t expected_size = sizeof(MessageHeader) + sizeof(symbol_id) + 
+                            sizeof(bid_price) + sizeof(bid_quantity) + 
+                            sizeof(ask_price) + sizeof(ask_quantity) + sizeof(date_time);
+    if (size < expected_size) return false;
+    
+    // Safely copy field by field
+    size_t offset = 0;
+    memcpy(&header, data + offset, sizeof(header));
+    offset += sizeof(header);
+    memcpy(&symbol_id, data + offset, sizeof(symbol_id));
+    offset += sizeof(symbol_id);
+    memcpy(&bid_price, data + offset, sizeof(bid_price));
+    offset += sizeof(bid_price);
+    memcpy(&bid_quantity, data + offset, sizeof(bid_quantity));
+    offset += sizeof(bid_quantity);
+    memcpy(&ask_price, data + offset, sizeof(ask_price));
+    offset += sizeof(ask_price);
+    memcpy(&ask_quantity, data + offset, sizeof(ask_quantity));
+    offset += sizeof(ask_quantity);
+    memcpy(&date_time, data + offset, sizeof(date_time));
+    
     return true;
 }
 

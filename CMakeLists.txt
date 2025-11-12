@@ -233,3 +233,12 @@ if (BUILD_TESTING AND ENABLE_TESTING)
     add_test(NAME jwt_debug COMMAND test_jwt_debug)
     add_test(NAME dtc_protocol COMMAND test_dtc_protocol)
 endif()
+
+# DTC Test Client executable
+add_executable(test_dtc_client test_dtc_client.cpp)
+target_link_libraries(test_dtc_client coinbase_dtc_core)
+target_include_directories(test_dtc_client PRIVATE include)
+
+if(WIN32)
+    target_link_libraries(test_dtc_client ws2_32)
+endif()
