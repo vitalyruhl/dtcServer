@@ -45,6 +45,7 @@ add_library(coinbase_dtc_core STATIC
     src/coinbase_feed/feed.cpp
     src/coinbase_websocket/websocket_client.cpp
     src/server/server.cpp
+    src/server/symbol_manager.cpp
     src/util/log.cpp
     src/test/api_mock.cpp
     src/credentials/cdp_credentials.cpp

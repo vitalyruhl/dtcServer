@@ -3,6 +3,36 @@
 #include <vector>
 #include <cstring>
 #include <algorithm>
+#include <unordered_map>
+
+// Symbol information for better logging
+struct ClientSymbolInfo {
+    std::string symbol;
+    std::string display_name;
+    std::string exchange;
+};
+
+// Known symbols mapping (should match server's SymbolManager)
+static std::unordered_map<uint32_t, ClientSymbolInfo> symbol_map = {
+    {1, {"STRK-USDC", "Starknet/USDC", "coinbase"}},
+    {2, {"USDC-EUR", "USDC/EUR", "coinbase"}},
+    {3, {"SOL-USDC", "Solana/USDC", "coinbase"}},
+    {4, {"BTC-USDC", "Bitcoin/USDC", "coinbase"}},
+    {5, {"ETH-USDC", "Ethereum/USDC", "coinbase"}},
+    {6, {"LTC-USDC", "Litecoin/USDC", "coinbase"}},
+    {7, {"LINK-USDC", "Chainlink/USDC", "coinbase"}},
+    {8, {"XRP-USDC", "XRP/USDC", "coinbase"}},
+    {9, {"ADA-USDC", "Cardano/USDC", "coinbase"}}
+};
+
+// Helper function to get symbol info
+static std::string get_symbol_info(uint32_t symbol_id) {
+    auto it = symbol_map.find(symbol_id);
+    if (it != symbol_map.end()) {
+        return it->second.symbol + " [" + it->second.exchange + "]";
+    }
+    return "Unknown Symbol " + std::to_string(symbol_id);
+}
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -176,14 +206,14 @@ public:
                         }
                         case MessageType::MARKET_DATA_UPDATE_TRADE: {
                             auto* trade = static_cast<MarketDataUpdateTrade*>(message.get());
-                            std::cout << "[TRADE] Trade Update: Symbol " << trade->symbol_id 
+                            std::cout << "[TRADE] Trade Update: " << get_symbol_info(trade->symbol_id)
                                      << " - Price: $" << trade->price 
                                      << " Vol: " << trade->volume << std::endl;
                             break;
                         }
                         case MessageType::MARKET_DATA_UPDATE_BID_ASK: {
                             auto* book = static_cast<MarketDataUpdateBidAsk*>(message.get());
-                            std::cout << "[BOOK] OrderBook: Symbol " << book->symbol_id 
+                            std::cout << "[BOOK] OrderBook: " << get_symbol_info(book->symbol_id)
                                      << " - Bid: $" << book->bid_price << " x " << book->bid_quantity
                                      << " | Ask: $" << book->ask_price << " x " << book->ask_quantity 
                                      << std::endl;

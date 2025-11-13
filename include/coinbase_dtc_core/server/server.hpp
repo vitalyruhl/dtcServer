@@ -9,6 +9,8 @@
 #include <map>
 #include <cstring>
 #include "coinbase_dtc_core/dtc/protocol.hpp"
+#include "symbol_manager.hpp"
+#include "coinbase_dtc_core/feed/coinbase/websocket_client.hpp"
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -122,6 +124,12 @@ public:
     void broadcast_bid_ask_update(uint32_t symbol_id, double bid_price, double bid_qty, 
                                   double ask_price, double ask_qty, uint64_t timestamp);
     
+    // WebSocket market data callbacks
+    void on_trade_data(const feed::coinbase::TradeData& trade);
+    void on_level2_data(const feed::coinbase::Level2Data& level2);
+    void broadcast_market_data(const dtc::MarketDataUpdateTrade& update);
+    void broadcast_market_data(const dtc::MarketDataUpdateBidAsk& update);
+    
     // Utility functions
     static std::string get_local_ip();
     static uint64_t get_current_timestamp();
@@ -131,6 +139,9 @@ private:
     void accept_loop();
     void handle_client(std::shared_ptr<ClientSession> client);
     bool process_client_messages(std::shared_ptr<ClientSession> client);
+    
+    // WebSocket initialization
+    void initialize_websocket_client();
     
     // Message processing
     void handle_logon_request(std::shared_ptr<ClientSession> client, std::unique_ptr<dtc::DTCMessage> message);
@@ -156,6 +167,9 @@ private:
     int server_socket_;
     struct sockaddr_in server_addr_;
     
+    // Symbol management
+    std::unique_ptr<SymbolManager> symbol_manager_;
+    
     // Threading
     std::thread accept_thread_;
     std::vector<std::thread> client_threads_;
@@ -163,6 +177,9 @@ private:
     // Client management
     std::vector<std::shared_ptr<ClientSession>> clients_;
     mutable std::mutex clients_mutex_;
+    
+    // Market data components
+    std::unique_ptr<feed::coinbase::WebSocketClient> ws_client_;
     
     // Message handlers
     std::map<dtc::MessageType, MessageHandler> message_handlers_;

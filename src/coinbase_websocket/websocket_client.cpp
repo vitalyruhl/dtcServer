@@ -84,6 +84,12 @@ bool WebSocketClient::subscribe_trades(const std::string& product_id) {
         return false;
     }
     
+    // Add to subscribed symbols
+    {
+        std::lock_guard<std::mutex> lock(subscriptions_mutex_);
+        subscribed_symbols_.push_back(product_id);
+    }
+    
     util::log("[WS] Subscribing to trades for " + product_id);
     
     // Create subscription message (simplified JSON)
@@ -117,6 +123,22 @@ bool WebSocketClient::subscribe_level2(const std::string& product_id) {
 bool WebSocketClient::unsubscribe(const std::string& product_id) {
     util::log("[WS] Unsubscribing from " + product_id);
     return true;
+}
+
+bool WebSocketClient::subscribe_multiple_symbols(const std::vector<std::string>& product_ids) {
+    bool all_success = true;
+    for (const auto& product_id : product_ids) {
+        if (!subscribe_trades(product_id) || !subscribe_level2(product_id)) {
+            all_success = false;
+            util::log("[WS] Failed to subscribe to " + product_id);
+        }
+    }
+    return all_success;
+}
+
+std::vector<std::string> WebSocketClient::get_subscribed_symbols() const {
+    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(subscriptions_mutex_));
+    return subscribed_symbols_;
 }
 
 std::string WebSocketClient::get_status() const {

@@ -63,7 +63,8 @@ bool ClientSession::send_raw_data(const std::vector<uint8_t>& data) {
 
 // Server Implementation
 Server::Server(const ServerConfig& config) 
-    : config_(config), running_(false), shutdown_requested_(false), server_socket_(-1) {
+    : config_(config), running_(false), shutdown_requested_(false), server_socket_(-1), 
+      symbol_manager_(std::make_unique<SymbolManager>()) {
     
     #ifdef _WIN32
     // Initialize Winsock
@@ -76,6 +77,40 @@ Server::Server(const ServerConfig& config)
     #endif
     
     util::log("DTC Server initialized on port " + std::to_string(config_.port));
+    util::log("[SYMBOL] Initialized with " + std::to_string(symbol_manager_->get_symbol_count()) + " symbols");
+    
+    // Initialize WebSocket client with multi-symbol callbacks
+    initialize_websocket_client();
+}
+
+void Server::initialize_websocket_client() {
+    ws_client_ = std::make_unique<feed::coinbase::WebSocketClient>();
+    
+    // Set callbacks
+    ws_client_->set_trade_callback([this](const feed::coinbase::TradeData& trade) {
+        this->on_trade_data(trade);
+    });
+    
+    ws_client_->set_level2_callback([this](const feed::coinbase::Level2Data& level2) {
+        this->on_level2_data(level2);
+    });
+    
+    // Connect and subscribe to all symbols
+    if (ws_client_->connect()) {
+        auto symbols = symbol_manager_->get_all_symbols();
+        std::vector<std::string> symbol_names;
+        for (const auto& symbol : symbols) {
+            symbol_names.push_back(symbol->symbol);
+        }
+        
+        if (ws_client_->subscribe_multiple_symbols(symbol_names)) {
+            util::log("[Server] Subscribed to " + std::to_string(symbol_names.size()) + " symbols for market data");
+        } else {
+            util::log("[Server] Warning: Failed to subscribe to some symbols");
+        }
+    } else {
+        util::log("[Server] Warning: Could not connect to WebSocket feed");
+    }
 }
 
 Server::~Server() {
@@ -477,6 +512,67 @@ void Server::set_connection_handler(ConnectionHandler handler) {
 
 void Server::set_disconnection_handler(ConnectionHandler handler) {
     disconnection_handler_ = handler;
+}
+
+// WebSocket Callback Handlers
+void Server::on_trade_data(const feed::coinbase::TradeData& trade) {
+    // Find symbol info for this trade
+    auto symbol_info = symbol_manager_->get_symbol_by_name(trade.product_id);
+    if (!symbol_info) {
+        return; // Unknown symbol
+    }
+    
+    // Create DTC MarketDataUpdateTrade
+    dtc::MarketDataUpdateTrade update;
+    update.symbol_id = symbol_info->symbol_id;
+    update.price = trade.price;
+    update.volume = trade.size;
+    update.date_time = trade.timestamp;
+    
+    // Broadcast to all subscribed clients
+    broadcast_market_data(update);
+    
+    util::log("[TRADE] " + trade.product_id + " @ " + 
+              std::to_string(trade.price) + " x " + 
+              std::to_string(trade.size));
+}
+
+void Server::on_level2_data(const feed::coinbase::Level2Data& level2) {
+    // Find symbol info
+    auto symbol_info = symbol_manager_->get_symbol_by_name(level2.product_id);
+    if (!symbol_info) {
+        return; // Unknown symbol
+    }
+    
+    // Create DTC MarketDataUpdateBidAsk
+    dtc::MarketDataUpdateBidAsk update;
+    update.symbol_id = symbol_info->symbol_id;
+    update.bid_price = level2.bid_price;
+    update.bid_quantity = level2.bid_size;
+    update.ask_price = level2.ask_price;
+    update.ask_quantity = level2.ask_size;
+    update.date_time = level2.timestamp;
+    
+    // Broadcast to all subscribed clients
+    broadcast_market_data(update);
+}
+
+void Server::broadcast_market_data(const dtc::MarketDataUpdateTrade& update) {
+    auto clients = get_clients();
+    for (auto& client : clients) {
+        if (client->is_authenticated() && client->get_state() == ClientState::SUBSCRIBED) {
+            client->send_message(update);
+        }
+    }
+}
+
+void Server::broadcast_market_data(const dtc::MarketDataUpdateBidAsk& update) {
+    auto clients = get_clients();
+    for (auto& client : clients) {
+        if (client->is_authenticated() && client->get_state() == ClientState::SUBSCRIBED) {
+            client->send_message(update);
+        }
+    }
 }
 
 } // namespace server

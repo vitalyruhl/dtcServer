@@ -61,7 +61,9 @@ public:
     // Subscription management
     bool subscribe_trades(const std::string& product_id = "BTC-USD");
     bool subscribe_level2(const std::string& product_id = "BTC-USD");
+    bool subscribe_multiple_symbols(const std::vector<std::string>& product_ids);
     bool unsubscribe(const std::string& product_id = "BTC-USD");
+    std::vector<std::string> get_subscribed_symbols() const;
     
     // Callback registration
     void set_trade_callback(TradeCallback callback) { 
@@ -97,6 +99,10 @@ private:
     // Message queues
     std::mutex send_queue_mutex_;
     std::queue<std::string> send_queue_;
+    
+    // Subscription tracking
+    std::mutex subscriptions_mutex_;
+    std::vector<std::string> subscribed_symbols_;
     
     // Statistics
     std::atomic<uint64_t> messages_received_;
