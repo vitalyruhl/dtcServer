@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main, master, develop ]
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   docker-test:
     runs-on: ubuntu-latest
