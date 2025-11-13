@@ -274,12 +274,25 @@ if (BUILD_TESTING AND ENABLE_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/settings
     )
     
+    # DTC Integration Test (server + client communication)
+    add_executable(test_dtc_integration
+        tests/integration/test_dtc_integration.cpp
+    )
+    target_link_libraries(test_dtc_integration
+        dtc_protocol
+        dtc_util
+    )
+    target_include_directories(test_dtc_integration PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    
     # Windows-specific libraries for tests
     if(WIN32)
         target_link_libraries(test_dtc_protocol ws2_32 wsock32)
         target_link_libraries(test_server ws2_32 wsock32)
         target_link_libraries(test_coinbase ws2_32 wsock32)
         target_link_libraries(test_integration ws2_32 wsock32)
+        target_link_libraries(test_dtc_integration ws2_32 wsock32)
     endif()
     
     # Add tests
@@ -287,6 +300,13 @@ if (BUILD_TESTING AND ENABLE_TESTING)
     add_test(NAME ServerTest COMMAND test_server)
     add_test(NAME CoinbaseTest COMMAND test_coinbase)
     add_test(NAME IntegrationTest COMMAND test_integration)
+    
+    # Add PowerShell server test (CI/CD friendly)
+    if(WIN32)
+        add_test(NAME ServerStartupTest 
+                 COMMAND powershell -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/test-server.ps1"
+                 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+    endif()
     
 endif()
 

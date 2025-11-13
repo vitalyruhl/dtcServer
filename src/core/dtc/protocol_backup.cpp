@@ -105,7 +105,7 @@ std::string Protocol::version() const {
     return "8.0.1";
 }
 
-std::unique_ptr<DTCMessage> Protocol::parse_message(const uint8_t* data, uint16_t size) {
+std::unique_ptr<DTCMessage> Protocol::parse_message(const uint8_t* data, size_t size) {
     if (!data || size < sizeof(MessageHeader)) {
         return nullptr;
     }
