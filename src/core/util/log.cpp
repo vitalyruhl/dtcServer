@@ -1,10 +1,12 @@
 #include "coinbase_dtc_core/core/util/log.hpp"
 #include <iostream>
 
-namespace coinbase_dtc_core {
-namespace util {
+namespace open_dtc_server
+{
+    namespace util
+    {
 
-void log(const std::string& message) { std::cout << "[coinbase-dtc-core] " << message << '\n'; }
+        void log(const std::string &message) { std::cout << "[coinbase-dtc-core] " << message << '\n'; }
 
-} // namespace util
-} // namespace coinbase_dtc_core
+    } // namespace util
+} // namespace open_dtc_server

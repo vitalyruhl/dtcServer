@@ -1,10 +1,12 @@
 #pragma once
 #include <string>
 
-namespace coinbase_dtc_core {
-namespace util {
+namespace open_dtc_server
+{
+    namespace util
+    {
 
-void log(const std::string& message);
+        void log(const std::string &message);
 
-} // namespace util
-} // namespace coinbase_dtc_core
+    } // namespace util
+} // namespace open_dtc_server

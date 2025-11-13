@@ -1,0 +1,19 @@
+# Copilot soll diese Dateien/Ordner ignorieren
+build/
+.git/
+*.exe
+*.obj
+*.lib
+*.pdb
+.vs/
+.vscode/
+secrets/
+*.log
+tmp/
+
+# Aber diese wichtigen Dateien soll Copilot berücksichtigen
+!CMakeLists.txt
+!*.hpp
+!*.cpp
+!*.ps1
+!*.md

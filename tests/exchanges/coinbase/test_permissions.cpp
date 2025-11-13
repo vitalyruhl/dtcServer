@@ -1,4 +1,4 @@
-#include "coinbase_dtc_core/auth/jwt_auth.hpp"
+#include "coinbase_dtc_core/core/auth/jwt_auth.hpp"
 #include <iostream>
 #include <vector>
 #include <tuple>
@@ -6,25 +6,29 @@
 #include <curl/curl.h>
 
 // Simple HTTP client for testing different endpoints
-class SimpleHttpClient {
+class SimpleHttpClient
+{
 public:
-    static size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::string* userp) {
-        userp->append((char*)contents, size * nmemb);
+    static size_t WriteCallback(void *contents, size_t size, size_t nmemb, std::string *userp)
+    {
+        userp->append((char *)contents, size * nmemb);
         return size * nmemb;
     }
 
-    static void test_endpoint(const std::string& endpoint, const std::string& auth_header, const std::string& description) {
+    static void test_endpoint(const std::string &endpoint, const std::string &auth_header, const std::string &description)
+    {
         std::cout << "\n🔍 Testing: " << description << std::endl;
         std::cout << "   Endpoint: " << endpoint << std::endl;
 
-        CURL* curl = curl_easy_init();
-        if (!curl) {
+        CURL *curl = curl_easy_init();
+        if (!curl)
+        {
             std::cout << "❌ Failed to initialize curl" << std::endl;
             return;
         }
 
         std::string response;
-        struct curl_slist* headers = nullptr;
+        struct curl_slist *headers = nullptr;
         headers = curl_slist_append(headers, auth_header.c_str());
 
         curl_easy_setopt(curl, CURLOPT_URL, endpoint.c_str());
@@ -37,22 +41,32 @@ public:
         long status_code;
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
 
-        if (res == CURLE_OK) {
+        if (res == CURLE_OK)
+        {
             std::cout << "   Status: " << status_code;
-            if (status_code == 200) {
+            if (status_code == 200)
+            {
                 std::cout << " ✅ SUCCESS!" << std::endl;
                 std::cout << "   Response: " << response.substr(0, 100) << "..." << std::endl;
-            } else if (status_code == 401) {
+            }
+            else if (status_code == 401)
+            {
                 std::cout << " ❌ UNAUTHORIZED" << std::endl;
                 std::cout << "   Response: " << response << std::endl;
-            } else if (status_code == 403) {
+            }
+            else if (status_code == 403)
+            {
                 std::cout << " 🚫 FORBIDDEN - Missing permissions" << std::endl;
                 std::cout << "   Response: " << response << std::endl;
-            } else {
+            }
+            else
+            {
                 std::cout << " ⚠️  UNEXPECTED" << std::endl;
                 std::cout << "   Response: " << response << std::endl;
             }
-        } else {
+        }
+        else
+        {
             std::cout << "❌ Request failed: " << curl_easy_strerror(res) << std::endl;
         }
 
@@ -61,18 +75,22 @@ public:
     }
 };
 
-int main() {
+int main()
+{
     std::cout << "🔐 Testing API Key Permissions..." << std::endl;
 
-    try {
+    try
+    {
         // Load credentials - try environment variables first, then files
-        auto creds = coinbase_dtc_core::auth::CDPCredentials::from_environment();
-        if (!creds.is_valid()) {
+        auto creds = open_dtc_server::auth::CDPCredentials::from_environment();
+        if (!creds.is_valid())
+        {
             // Fallback to JSON file
-            creds = coinbase_dtc_core::auth::CDPCredentials::from_json_file("secrets/cdp_api_key_ECDSA.json");
+            creds = open_dtc_server::auth::CDPCredentials::from_json_file("secrets/cdp_api_key_ECDSA.json");
         }
-        
-        if (!creds.is_valid()) {
+
+        if (!creds.is_valid())
+        {
             std::cout << "❌ No valid credentials found!" << std::endl;
             std::cout << "   Try setting environment variables CDP_API_KEY_ID and CDP_PRIVATE_KEY" << std::endl;
             std::cout << "   Or provide secrets/cdp_api_key_ECDSA.json file" << std::endl;
@@ -82,34 +100,41 @@ int main() {
         std::cout << "✅ Loaded credentials: " << creds.key_id << std::endl;
 
         // Create authenticator
-        coinbase_dtc_core::auth::JWTAuthenticator auth(creds);
+        open_dtc_server::auth::JWTAuthenticator auth(creds);
 
         // Test different endpoints with different permission requirements
         std::vector<std::tuple<std::string, std::string, std::string>> test_endpoints = {
             // Public endpoint (no auth needed - baseline test)
             {"https://api.coinbase.com/api/v3/brokerage/time", "", "Server Time (Public)"},
-            
+
             // Basic authenticated endpoints
             {"https://api.coinbase.com/api/v3/brokerage/key_permissions", "", "Key Permissions (View)"},
             {"https://api.coinbase.com/api/v3/brokerage/accounts", "", "List Accounts (View)"},
             {"https://api.coinbase.com/api/v3/brokerage/products", "", "List Products (View)"},
-            
+
             // Market data endpoints
             {"https://api.coinbase.com/api/v3/brokerage/products/BTC-USD", "", "Get Product BTC-USD (View)"},
             {"https://api.coinbase.com/api/v3/brokerage/best_bid_ask?product_ids=BTC-USD", "", "Best Bid/Ask (View)"},
         };
 
-        for (auto& [url, method, desc] : test_endpoints) {
-            if (url.find("time") != std::string::npos) {
+        for (auto &[url, method, desc] : test_endpoints)
+        {
+            if (url.find("time") != std::string::npos)
+            {
                 // Test public endpoint without auth
                 SimpleHttpClient::test_endpoint(url, "", desc);
-            } else {
+            }
+            else
+            {
                 // Test authenticated endpoints
-                try {
+                try
+                {
                     std::string jwt_token = auth.generate_token("GET", url.substr(url.find("/api")), "");
                     std::string auth_header = "Authorization: Bearer " + jwt_token;
                     SimpleHttpClient::test_endpoint(url, auth_header, desc);
-                } catch (const std::exception& e) {
+                }
+                catch (const std::exception &e)
+                {
                     std::cout << "\n❌ Failed to generate JWT for " << desc << ": " << e.what() << std::endl;
                 }
             }
@@ -120,8 +145,9 @@ int main() {
         std::cout << "   - If some return 403: Missing specific permissions" << std::endl;
         std::cout << "   - If key_permissions works: Key is active, check individual permissions" << std::endl;
         std::cout << "   - If nothing works: Wait 10-15 minutes and try again" << std::endl;
-
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception &e)
+    {
         std::cout << "❌ Test failed: " << e.what() << std::endl;
         return 1;
     }

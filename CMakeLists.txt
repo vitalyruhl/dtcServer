@@ -218,10 +218,19 @@ include(CTest)
 if (BUILD_TESTING AND ENABLE_TESTING)
     
     # Core Tests
+    add_executable(test_basic
+        tests/core/test_basic.cpp
+    )
+    target_link_libraries(test_basic dtc_protocol dtc_util)
+    target_include_directories(test_basic PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
     add_executable(test_dtc_protocol
         tests/core/dtc/test_dtc_protocol.cpp
     )
-        target_link_libraries(test_dtc_protocol dtc_protocol dtc_util)
+    target_link_libraries(test_dtc_protocol dtc_protocol dtc_util)
     target_include_directories(test_dtc_protocol PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/settings
@@ -242,25 +251,108 @@ if (BUILD_TESTING AND ENABLE_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/settings
     )
     
-    # Exchange Tests
-    add_executable(test_coinbase
+    # Root level tests (legacy compatibility)
+    add_executable(test_dtc_client_legacy
+        tests/test_dtc_client.cpp
+    )
+    target_link_libraries(test_dtc_client_legacy dtc_protocol dtc_util)
+    target_include_directories(test_dtc_client_legacy PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
+    add_executable(test_dtc_protocol_legacy
+        tests/test_dtc_protocol.cpp
+    )
+    target_link_libraries(test_dtc_protocol_legacy dtc_protocol dtc_util)
+    target_include_directories(test_dtc_protocol_legacy PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
+    # Exchange Tests - Coinbase
+    add_executable(test_coinbase_feed
         tests/exchanges/coinbase/test_coinbase_feed.cpp
     )
-    target_link_libraries(test_coinbase
+    target_link_libraries(test_coinbase_feed
         coinbase_feed 
         exchange_base 
         dtc_util
     )
-    target_include_directories(test_coinbase PRIVATE
+    target_include_directories(test_coinbase_feed PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
+    add_executable(test_advanced_trade_api
+        tests/exchanges/coinbase/test_advanced_trade_api.cpp
+    )
+    target_link_libraries(test_advanced_trade_api
+        coinbase_feed 
+        exchange_base 
+        dtc_util
+        dtc_auth
+    )
+    target_include_directories(test_advanced_trade_api PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
+    add_executable(test_jwt_auth
+        tests/exchanges/coinbase/test_jwt_auth.cpp
+    )
+    target_link_libraries(test_jwt_auth
+        dtc_auth
+        dtc_util
+    )
+    target_include_directories(test_jwt_auth PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
+    add_executable(test_permissions
+        tests/exchanges/coinbase/test_permissions.cpp
+    )
+    target_link_libraries(test_permissions
+        coinbase_feed
+        dtc_auth
+        dtc_util
+    )
+    target_include_directories(test_permissions PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
+    add_executable(test_jwt_debug
+        tests/exchanges/coinbase/test_jwt_debug.cpp
+    )
+    target_link_libraries(test_jwt_debug
+        dtc_auth
+        dtc_util
+    )
+    target_include_directories(test_jwt_debug PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/settings
     )
     
     # Integration Tests
-    add_executable(test_integration
+    add_executable(test_dtc_integration
+        tests/integration/test_dtc_integration.cpp
+    )
+    target_link_libraries(test_dtc_integration
+        dtc_protocol
+        dtc_util
+        dtc_server
+    )
+    target_include_directories(test_dtc_integration PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
+    add_executable(test_multi_exchange
         tests/integration/test_multi_exchange.cpp
     )
-    target_link_libraries(test_integration
+    target_link_libraries(test_multi_exchange
         dtc_protocol
         dtc_util
         dtc_server
@@ -269,37 +361,81 @@ if (BUILD_TESTING AND ENABLE_TESTING)
         coinbase_feed
         binance_feed
     )
-    target_include_directories(test_integration PRIVATE
+    target_include_directories(test_multi_exchange PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/settings
     )
     
-    # DTC Integration Test (server + client communication)
-    add_executable(test_dtc_integration
-        tests/integration/test_dtc_integration.cpp
+    add_executable(test_environment
+        tests/integration/test_environment.cpp
     )
-    target_link_libraries(test_dtc_integration
-        dtc_protocol
+    target_link_libraries(test_environment
+        dtc_util
+        dtc_auth
+    )
+    target_include_directories(test_environment PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
+    # Integration Utilities (token extraction)
+    add_executable(extract_token
+        tests/integration/extract_token.cpp
+    )
+    target_link_libraries(extract_token
+        dtc_auth
         dtc_util
     )
-    target_include_directories(test_dtc_integration PRIVATE
+    target_include_directories(extract_token PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
+    add_executable(extract_permissions_token
+        tests/integration/extract_permissions_token.cpp
+    )
+    target_link_libraries(extract_permissions_token
+        dtc_auth
+        dtc_util
+    )
+    target_include_directories(extract_permissions_token PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
     )
     
     # Windows-specific libraries for tests
     if(WIN32)
+        target_link_libraries(test_basic ws2_32 wsock32)
         target_link_libraries(test_dtc_protocol ws2_32 wsock32)
         target_link_libraries(test_server ws2_32 wsock32)
-        target_link_libraries(test_coinbase ws2_32 wsock32)
-        target_link_libraries(test_integration ws2_32 wsock32)
+        target_link_libraries(test_dtc_client_legacy ws2_32 wsock32)
+        target_link_libraries(test_dtc_protocol_legacy ws2_32 wsock32)
+        target_link_libraries(test_coinbase_feed ws2_32 wsock32)
+        target_link_libraries(test_advanced_trade_api ws2_32 wsock32)
+        target_link_libraries(test_jwt_auth ws2_32 wsock32)
+        target_link_libraries(test_permissions ws2_32 wsock32)
+        target_link_libraries(test_jwt_debug ws2_32 wsock32)
         target_link_libraries(test_dtc_integration ws2_32 wsock32)
+        target_link_libraries(test_multi_exchange ws2_32 wsock32)
+        target_link_libraries(test_environment ws2_32 wsock32)
+        target_link_libraries(extract_token ws2_32 wsock32)
+        target_link_libraries(extract_permissions_token ws2_32 wsock32)
     endif()
     
-    # Add tests
+    # Add tests to CTest
+    add_test(NAME BasicTest COMMAND test_basic)
     add_test(NAME DTCProtocolTest COMMAND test_dtc_protocol)
     add_test(NAME ServerTest COMMAND test_server)
-    add_test(NAME CoinbaseTest COMMAND test_coinbase)
-    add_test(NAME IntegrationTest COMMAND test_integration)
+    add_test(NAME DTCClientLegacyTest COMMAND test_dtc_client_legacy)
+    add_test(NAME DTCProtocolLegacyTest COMMAND test_dtc_protocol_legacy)
+    add_test(NAME CoinbaseFeedTest COMMAND test_coinbase_feed)
+    add_test(NAME AdvancedTradeAPITest COMMAND test_advanced_trade_api)
+    add_test(NAME JWTAuthTest COMMAND test_jwt_auth)
+    add_test(NAME PermissionsTest COMMAND test_permissions)
+    add_test(NAME JWTDebugTest COMMAND test_jwt_debug)
+    add_test(NAME DTCIntegrationTest COMMAND test_dtc_integration)
+    add_test(NAME MultiExchangeTest COMMAND test_multi_exchange)
+    add_test(NAME EnvironmentTest COMMAND test_environment)
     
     # Add PowerShell server test (CI/CD friendly)
     if(WIN32)

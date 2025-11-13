@@ -6,321 +6,362 @@
 #include <cstring>
 #include <algorithm>
 
-namespace coinbase_dtc_core {
-namespace feed {
-namespace coinbase {
-
-WebSocketClient::WebSocketClient() 
-    : connected_(false)
-    , should_stop_(false)
-    , socket_(-1)
-    , host_("ws-feed.exchange.coinbase.com")
-    , port_(80) // Use HTTP for simplicity, HTTPS/WSS would need SSL
-    , messages_received_(0)
-    , messages_sent_(0)
-    , last_message_time_(0) {
-    
-    #ifdef _WIN32
-    WSADATA wsaData;
-    WSAStartup(MAKEWORD(2, 2), &wsaData);
-    #endif
-}
-
-WebSocketClient::~WebSocketClient() {
-    disconnect();
-    
-    #ifdef _WIN32
-    WSACleanup();
-    #endif
-}
-
-bool WebSocketClient::connect(const std::string& host, uint16_t port) {
-    if (connected_.load()) {
-        return true;
-    }
-    
-    host_ = host;
-    port_ = port;
-    
-    util::log("[WS] Connecting to " + host + ":" + std::to_string(port));
-    
-    // For now, simulate successful connection instead of actual WebSocket
-    // Real WebSocket implementation would be more complex
-    connected_.store(true);
-    should_stop_.store(false);
-    
-    // Start worker threads
-    worker_thread_ = std::thread(&WebSocketClient::worker_loop, this);
-    ping_thread_ = std::thread(&WebSocketClient::ping_loop, this);
-    
-    util::log("[WS] Connected to Coinbase WebSocket feed (simulated)");
-    return true;
-}
-
-void WebSocketClient::disconnect() {
-    if (!connected_.load()) {
-        return;
-    }
-    
-    util::log("[WS] Disconnecting from Coinbase feed...");
-    
-    should_stop_.store(true);
-    connected_.store(false);
-    
-    // Wait for threads to finish
-    if (worker_thread_.joinable()) {
-        worker_thread_.join();
-    }
-    if (ping_thread_.joinable()) {
-        ping_thread_.join();
-    }
-    
-    cleanup_socket();
-    util::log("[WS] Disconnected from Coinbase feed");
-}
-
-bool WebSocketClient::subscribe_trades(const std::string& product_id) {
-    if (!connected_.load()) {
-        return false;
-    }
-    
-    // Add to subscribed symbols
+namespace open_dtc_server
+{
+    namespace feed
     {
-        std::lock_guard<std::mutex> lock(subscriptions_mutex_);
-        subscribed_symbols_.push_back(product_id);
-    }
-    
-    util::log("[WS] Subscribing to trades for " + product_id);
-    
-    // Create subscription message (simplified JSON)
-    std::string message = create_subscribe_message("matches", product_id);
-    
-    {
-        std::lock_guard<std::mutex> lock(send_queue_mutex_);
-        send_queue_.push(message);
-    }
-    
-    return true;
-}
-
-bool WebSocketClient::subscribe_level2(const std::string& product_id) {
-    if (!connected_.load()) {
-        return false;
-    }
-    
-    util::log("[WS] Subscribing to level2 for " + product_id);
-    
-    std::string message = create_subscribe_message("level2", product_id);
-    
-    {
-        std::lock_guard<std::mutex> lock(send_queue_mutex_);
-        send_queue_.push(message);
-    }
-    
-    return true;
-}
-
-bool WebSocketClient::unsubscribe(const std::string& product_id) {
-    util::log("[WS] Unsubscribing from " + product_id);
-    return true;
-}
-
-bool WebSocketClient::subscribe_multiple_symbols(const std::vector<std::string>& product_ids) {
-    bool all_success = true;
-    for (const auto& product_id : product_ids) {
-        if (!subscribe_trades(product_id) || !subscribe_level2(product_id)) {
-            all_success = false;
-            util::log("[WS] Failed to subscribe to " + product_id);
-        }
-    }
-    return all_success;
-}
-
-std::vector<std::string> WebSocketClient::get_subscribed_symbols() const {
-    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(subscriptions_mutex_));
-    return subscribed_symbols_;
-}
-
-std::string WebSocketClient::get_status() const {
-    std::stringstream ss;
-    ss << "Coinbase WebSocket Status:\n";
-    ss << "  Connected: " << (connected_.load() ? "Yes" : "No") << "\n";
-    ss << "  Host: " << host_ << ":" << port_ << "\n";
-    ss << "  Messages Received: " << messages_received_.load() << "\n";
-    ss << "  Messages Sent: " << messages_sent_.load() << "\n";
-    ss << "  Last Activity: " << last_message_time_.load() << "\n";
-    return ss.str();
-}
-
-void WebSocketClient::worker_loop() {
-    util::log("[WS] Worker thread started - connecting to Coinbase");
-    
-    // For now, use realistic simulation with proper symbol names
-    // TODO: Implement real WebSocket connection to wss://ws-feed.exchange.coinbase.com
-    
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    
-    // Realistic price ranges for each symbol
-    std::unordered_map<std::string, std::pair<double, double>> price_ranges = {
-        {"STRK-USDC", {0.45, 0.65}},      // Starknet realistic range
-        {"USDC-EUR", {0.85, 0.95}},       // USDC/EUR exchange rate
-        {"SOL-USDC", {180.0, 220.0}},     // Solana range
-        {"BTC-USDC", {85000.0, 95000.0}}, // Bitcoin range
-        {"ETH-USDC", {3200.0, 3800.0}},   // Ethereum range
-        {"LTC-USDC", {85.0, 105.0}},      // Litecoin range
-        {"LINK-USDC", {18.0, 25.0}},      // Chainlink range  
-        {"XRP-USDC", {1.10, 1.35}},       // Ripple range
-        {"ADA-USDC", {0.85, 1.15}}        // Cardano range
-    };
-    
-    while (!should_stop_.load() && connected_.load()) {
-        auto current_time = get_current_timestamp();
-        
-        // Get currently subscribed symbols
-        std::vector<std::string> symbols;
+        namespace coinbase
         {
-            std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(subscriptions_mutex_));
-            symbols = subscribed_symbols_;
-        }
-        
-        // Generate data for each subscribed symbol
-        for (const auto& symbol : symbols) {
-            auto price_it = price_ranges.find(symbol);
-            if (price_it == price_ranges.end()) continue;
-            
-            double min_price = price_it->second.first;
-            double max_price = price_it->second.second;
-            std::uniform_real_distribution<> price_dist(min_price, max_price);
-            std::uniform_real_distribution<> volume_dist(0.001, 0.500);
-            std::uniform_real_distribution<> spread_dist(0.001, 0.005); // 0.1-0.5% spread
-            
-            // Generate trade data
-            if (trade_callback_) {
-                TradeData trade;
-                trade.product_id = symbol;
-                trade.price = price_dist(gen);
-                trade.size = volume_dist(gen);
-                trade.side = (gen() % 2) ? "buy" : "sell";
-                trade.timestamp = current_time;
-                
+
+            WebSocketClient::WebSocketClient()
+                : connected_(false), should_stop_(false), socket_(-1), host_("ws-feed.exchange.coinbase.com"), port_(80) // Use HTTP for simplicity, HTTPS/WSS would need SSL
+                  ,
+                  messages_received_(0), messages_sent_(0), last_message_time_(0)
+            {
+
+#ifdef _WIN32
+                WSADATA wsaData;
+                WSAStartup(MAKEWORD(2, 2), &wsaData);
+#endif
+            }
+
+            WebSocketClient::~WebSocketClient()
+            {
+                disconnect();
+
+#ifdef _WIN32
+                WSACleanup();
+#endif
+            }
+
+            bool WebSocketClient::connect(const std::string &host, uint16_t port)
+            {
+                if (connected_.load())
                 {
-                    std::lock_guard<std::mutex> lock(callback_mutex_);
-                    if (trade_callback_) {
-                        trade_callback_(trade);
+                    return true;
+                }
+
+                host_ = host;
+                port_ = port;
+
+                util::log("[WS] Connecting to " + host + ":" + std::to_string(port));
+
+                // For now, simulate successful connection instead of actual WebSocket
+                // Real WebSocket implementation would be more complex
+                connected_.store(true);
+                should_stop_.store(false);
+
+                // Start worker threads
+                worker_thread_ = std::thread(&WebSocketClient::worker_loop, this);
+                ping_thread_ = std::thread(&WebSocketClient::ping_loop, this);
+
+                util::log("[WS] Connected to Coinbase WebSocket feed (simulated)");
+                return true;
+            }
+
+            void WebSocketClient::disconnect()
+            {
+                if (!connected_.load())
+                {
+                    return;
+                }
+
+                util::log("[WS] Disconnecting from Coinbase feed...");
+
+                should_stop_.store(true);
+                connected_.store(false);
+
+                // Wait for threads to finish
+                if (worker_thread_.joinable())
+                {
+                    worker_thread_.join();
+                }
+                if (ping_thread_.joinable())
+                {
+                    ping_thread_.join();
+                }
+
+                cleanup_socket();
+                util::log("[WS] Disconnected from Coinbase feed");
+            }
+
+            bool WebSocketClient::subscribe_trades(const std::string &product_id)
+            {
+                if (!connected_.load())
+                {
+                    return false;
+                }
+
+                // Add to subscribed symbols
+                {
+                    std::lock_guard<std::mutex> lock(subscriptions_mutex_);
+                    subscribed_symbols_.push_back(product_id);
+                }
+
+                util::log("[WS] Subscribing to trades for " + product_id);
+
+                // Create subscription message (simplified JSON)
+                std::string message = create_subscribe_message("matches", product_id);
+
+                {
+                    std::lock_guard<std::mutex> lock(send_queue_mutex_);
+                    send_queue_.push(message);
+                }
+
+                return true;
+            }
+
+            bool WebSocketClient::subscribe_level2(const std::string &product_id)
+            {
+                if (!connected_.load())
+                {
+                    return false;
+                }
+
+                util::log("[WS] Subscribing to level2 for " + product_id);
+
+                std::string message = create_subscribe_message("level2", product_id);
+
+                {
+                    std::lock_guard<std::mutex> lock(send_queue_mutex_);
+                    send_queue_.push(message);
+                }
+
+                return true;
+            }
+
+            bool WebSocketClient::unsubscribe(const std::string &product_id)
+            {
+                util::log("[WS] Unsubscribing from " + product_id);
+                return true;
+            }
+
+            bool WebSocketClient::subscribe_multiple_symbols(const std::vector<std::string> &product_ids)
+            {
+                bool all_success = true;
+                for (const auto &product_id : product_ids)
+                {
+                    if (!subscribe_trades(product_id) || !subscribe_level2(product_id))
+                    {
+                        all_success = false;
+                        util::log("[WS] Failed to subscribe to " + product_id);
                     }
                 }
-                
-                messages_received_++;
-                last_message_time_.store(current_time);
+                return all_success;
             }
-            
-            // Generate level2 data
-            if (level2_callback_) {
-                Level2Data level2;
-                level2.product_id = symbol;
-                double base_price = price_dist(gen);
-                double spread_pct = spread_dist(gen);
-                level2.bid_price = base_price * (1.0 - spread_pct);
-                level2.ask_price = base_price * (1.0 + spread_pct);
-                level2.bid_size = volume_dist(gen) * 10;
-                level2.ask_size = volume_dist(gen) * 10;
-                level2.timestamp = current_time;
-                
+
+            std::vector<std::string> WebSocketClient::get_subscribed_symbols() const
+            {
+                std::lock_guard<std::mutex> lock(const_cast<std::mutex &>(subscriptions_mutex_));
+                return subscribed_symbols_;
+            }
+
+            std::string WebSocketClient::get_status() const
+            {
+                std::stringstream ss;
+                ss << "Coinbase WebSocket Status:\n";
+                ss << "  Connected: " << (connected_.load() ? "Yes" : "No") << "\n";
+                ss << "  Host: " << host_ << ":" << port_ << "\n";
+                ss << "  Messages Received: " << messages_received_.load() << "\n";
+                ss << "  Messages Sent: " << messages_sent_.load() << "\n";
+                ss << "  Last Activity: " << last_message_time_.load() << "\n";
+                return ss.str();
+            }
+
+            void WebSocketClient::worker_loop()
+            {
+                util::log("[WS] Worker thread started - connecting to Coinbase");
+
+                // For now, use realistic simulation with proper symbol names
+                // TODO: Implement real WebSocket connection to wss://ws-feed.exchange.coinbase.com
+
+                std::random_device rd;
+                std::mt19937 gen(rd());
+
+                // Realistic price ranges for each symbol
+                std::unordered_map<std::string, std::pair<double, double>> price_ranges = {
+                    {"STRK-USDC", {0.45, 0.65}},      // Starknet realistic range
+                    {"USDC-EUR", {0.85, 0.95}},       // USDC/EUR exchange rate
+                    {"SOL-USDC", {180.0, 220.0}},     // Solana range
+                    {"BTC-USDC", {85000.0, 95000.0}}, // Bitcoin range
+                    {"ETH-USDC", {3200.0, 3800.0}},   // Ethereum range
+                    {"LTC-USDC", {85.0, 105.0}},      // Litecoin range
+                    {"LINK-USDC", {18.0, 25.0}},      // Chainlink range
+                    {"XRP-USDC", {1.10, 1.35}},       // Ripple range
+                    {"ADA-USDC", {0.85, 1.15}}        // Cardano range
+                };
+
+                while (!should_stop_.load() && connected_.load())
                 {
-                    std::lock_guard<std::mutex> lock(callback_mutex_);
-                    if (level2_callback_) {
-                        level2_callback_(level2);
+                    auto current_time = get_current_timestamp();
+
+                    // Get currently subscribed symbols
+                    std::vector<std::string> symbols;
+                    {
+                        std::lock_guard<std::mutex> lock(const_cast<std::mutex &>(subscriptions_mutex_));
+                        symbols = subscribed_symbols_;
+                    }
+
+                    // Generate data for each subscribed symbol
+                    for (const auto &symbol : symbols)
+                    {
+                        auto price_it = price_ranges.find(symbol);
+                        if (price_it == price_ranges.end())
+                            continue;
+
+                        double min_price = price_it->second.first;
+                        double max_price = price_it->second.second;
+                        std::uniform_real_distribution<> price_dist(min_price, max_price);
+                        std::uniform_real_distribution<> volume_dist(0.001, 0.500);
+                        std::uniform_real_distribution<> spread_dist(0.001, 0.005); // 0.1-0.5% spread
+
+                        // Generate trade data
+                        if (trade_callback_)
+                        {
+                            TradeData trade;
+                            trade.product_id = symbol;
+                            trade.price = price_dist(gen);
+                            trade.size = volume_dist(gen);
+                            trade.side = (gen() % 2) ? "buy" : "sell";
+                            trade.timestamp = current_time;
+
+                            {
+                                std::lock_guard<std::mutex> lock(callback_mutex_);
+                                if (trade_callback_)
+                                {
+                                    trade_callback_(trade);
+                                }
+                            }
+
+                            messages_received_++;
+                            last_message_time_.store(current_time);
+                        }
+
+                        // Generate level2 data
+                        if (level2_callback_)
+                        {
+                            Level2Data level2;
+                            level2.product_id = symbol;
+                            double base_price = price_dist(gen);
+                            double spread_pct = spread_dist(gen);
+                            level2.bid_price = base_price * (1.0 - spread_pct);
+                            level2.ask_price = base_price * (1.0 + spread_pct);
+                            level2.bid_size = volume_dist(gen) * 10;
+                            level2.ask_size = volume_dist(gen) * 10;
+                            level2.timestamp = current_time;
+
+                            {
+                                std::lock_guard<std::mutex> lock(callback_mutex_);
+                                if (level2_callback_)
+                                {
+                                    level2_callback_(level2);
+                                }
+                            }
+
+                            messages_received_++;
+                            last_message_time_.store(current_time);
+                        }
+                    }
+
+                    // Wait before next update (1-2 seconds)
+                    if (!should_stop_.load())
+                    {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1000 + (gen() % 1000)));
                     }
                 }
-                
-                messages_received_++;
-                last_message_time_.store(current_time);
+
+                util::log("[WS] Worker thread stopped");
             }
-        }
-        
-        // Wait before next update (1-2 seconds)
-        if (!should_stop_.load()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000 + (gen() % 1000)));
-        }
-    }
-    
-    util::log("[WS] Worker thread stopped");
-}
 
-void WebSocketClient::ping_loop() {
-    // Simple keepalive thread
-    while (!should_stop_.load() && connected_.load()) {
-        std::this_thread::sleep_for(std::chrono::seconds(30));
-        
-        if (connected_.load()) {
-            // Send ping (in real implementation)
-            messages_sent_++;
-        }
-    }
-}
+            void WebSocketClient::ping_loop()
+            {
+                // Simple keepalive thread
+                while (!should_stop_.load() && connected_.load())
+                {
+                    std::this_thread::sleep_for(std::chrono::seconds(30));
 
-std::string WebSocketClient::create_subscribe_message(const std::string& channel, const std::string& product_id) const {
-    // Simplified JSON subscription message
-    return "{\"type\":\"subscribe\",\"channels\":[{\"name\":\"" + channel + "\",\"product_ids\":[\"" + product_id + "\"]}]}";
-}
+                    if (connected_.load())
+                    {
+                        // Send ping (in real implementation)
+                        messages_sent_++;
+                    }
+                }
+            }
 
-std::string WebSocketClient::create_unsubscribe_message(const std::string& product_id) const {
-    return "{\"type\":\"unsubscribe\",\"product_ids\":[\"" + product_id + "\"]}";
-}
+            std::string WebSocketClient::create_subscribe_message(const std::string &channel, const std::string &product_id) const
+            {
+                // Simplified JSON subscription message
+                return "{\"type\":\"subscribe\",\"channels\":[{\"name\":\"" + channel + "\",\"product_ids\":[\"" + product_id + "\"]}]}";
+            }
 
-uint64_t WebSocketClient::get_current_timestamp() const {
-    auto now = std::chrono::high_resolution_clock::now();
-    auto duration = now.time_since_epoch();
-    return std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
-}
+            std::string WebSocketClient::create_unsubscribe_message(const std::string &product_id) const
+            {
+                return "{\"type\":\"unsubscribe\",\"product_ids\":[\"" + product_id + "\"]}";
+            }
 
-void WebSocketClient::cleanup_socket() {
-    if (socket_ != -1) {
-        closesocket(socket_);
-        socket_ = -1;
-    }
-}
+            uint64_t WebSocketClient::get_current_timestamp() const
+            {
+                auto now = std::chrono::high_resolution_clock::now();
+                auto duration = now.time_since_epoch();
+                return std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+            }
 
-bool WebSocketClient::send_websocket_message(const std::string& message) {
-    // Placeholder for actual WebSocket send
-    messages_sent_++;
-    return true;
-}
+            void WebSocketClient::cleanup_socket()
+            {
+                if (socket_ != -1)
+                {
+                    closesocket(socket_);
+                    socket_ = -1;
+                }
+            }
 
-void WebSocketClient::process_received_message(const std::string& message) {
-    // Placeholder for JSON parsing
-    messages_received_++;
-}
+            bool WebSocketClient::send_websocket_message(const std::string &message)
+            {
+                // Placeholder for actual WebSocket send
+                messages_sent_++;
+                return true;
+            }
 
-void WebSocketClient::parse_trade_message(const std::string& json) {
-    // Would parse actual JSON trade data
-}
+            void WebSocketClient::process_received_message(const std::string &message)
+            {
+                // Placeholder for JSON parsing
+                messages_received_++;
+            }
 
-void WebSocketClient::parse_level2_message(const std::string& json) {
-    // Would parse actual JSON level2 data
-}
+            void WebSocketClient::parse_trade_message(const std::string &json)
+            {
+                // Would parse actual JSON trade data
+            }
 
-std::string WebSocketClient::create_websocket_handshake() const {
-    // Placeholder for WebSocket handshake
-    return "";
-}
+            void WebSocketClient::parse_level2_message(const std::string &json)
+            {
+                // Would parse actual JSON level2 data
+            }
 
-bool WebSocketClient::perform_websocket_handshake() {
-    // Placeholder for handshake logic
-    return true;
-}
+            std::string WebSocketClient::create_websocket_handshake() const
+            {
+                // Placeholder for WebSocket handshake
+                return "";
+            }
 
-std::string WebSocketClient::encode_websocket_frame(const std::string& payload) const {
-    // Placeholder for WebSocket frame encoding
-    return payload;
-}
+            bool WebSocketClient::perform_websocket_handshake()
+            {
+                // Placeholder for handshake logic
+                return true;
+            }
 
-std::string WebSocketClient::decode_websocket_frame(const uint8_t* data, size_t length) const {
-    // Placeholder for WebSocket frame decoding
-    return std::string(reinterpret_cast<const char*>(data), length);
-}
+            std::string WebSocketClient::encode_websocket_frame(const std::string &payload) const
+            {
+                // Placeholder for WebSocket frame encoding
+                return payload;
+            }
 
-} // namespace coinbase
-} // namespace feed
-} // namespace coinbase_dtc_core
+            std::string WebSocketClient::decode_websocket_frame(const uint8_t *data, size_t length) const
+            {
+                // Placeholder for WebSocket frame decoding
+                return std::string(reinterpret_cast<const char *>(data), length);
+            }
+
+        } // namespace coinbase
+    } // namespace feed
+} // namespace open_dtc_server

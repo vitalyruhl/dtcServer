@@ -1,13 +1,14 @@
 # Coinbase DTC Core
 
-> **🚀 AUTHENTICATION READY - JWT working, DTC Integration Pending**
+> **🎯 PRIMARY FOCUS: Coinbase-SierraChart Bridge**
 >
-> **What's Working**: ✅ Coinbase API connectivity, JWT authentication (ES256/ECDSA), HTTP client, cross-platform builds, Docker deployment  
-> **What's Missing**: ❌ DTC protocol integration, market data feeds, trading operations
+> **Current Status**: ✅ DTC server running, Coinbase integration working, market data streaming  
+> **Project Goal**: Bridge between SierraChart and Coinbase Advanced Trade API  
+> **Roadmap**: Historical data → Local caching → Real-time DOM → Live trading (paid) → Docker deployment
 >
-> This project is building the infrastructure for Coinbase + DTC integration. The API layer and authentication are functional, but the core DTC features are not yet implemented.
+> **Note**: Coinbase integration ONLY. Other exchanges will be added later once Coinbase is stable and complete.
 
-Open-source C++17 library for integrating Coinbase Advanced Trade API with the Data Trading Client (DTC) protocol for market data feeds and trading operations.
+SierraChart-Coinbase bridge using DTC protocol for market data and trading operations.
 
 ## 🚀 Recent Major Updates (November 2025)
 

@@ -1,51 +1,57 @@
-#include "coinbase_dtc_core/auth/jwt_auth.hpp"
+#include "coinbase_dtc_core/core/auth/jwt_auth.hpp"
 #include <iostream>
 #include <curl/curl.h>
 #include <vector>
 
-struct TestEndpoint {
+struct TestEndpoint
+{
     std::string name;
     std::string base_url;
     std::string path;
     std::string expected_permission;
 };
 
-std::pair<long, std::string> make_request(const std::string& url, const std::string& auth_token = "") {
-    CURL* curl = curl_easy_init();
-    if (!curl) return {-1, "Failed to init curl"};
-    
+std::pair<long, std::string> make_request(const std::string &url, const std::string &auth_token = "")
+{
+    CURL *curl = curl_easy_init();
+    if (!curl)
+        return {-1, "Failed to init curl"};
+
     std::string response;
-    struct curl_slist* headers = nullptr;
-    
-    if (!auth_token.empty()) {
+    struct curl_slist *headers = nullptr;
+
+    if (!auth_token.empty())
+    {
         std::string auth_header = "Authorization: Bearer " + auth_token;
         headers = curl_slist_append(headers, auth_header.c_str());
     }
     headers = curl_slist_append(headers, "Content-Type: application/json");
-    
+
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, [](void* contents, size_t size, size_t nmemb, std::string* userp) -> size_t {
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, [](void *contents, size_t size, size_t nmemb, std::string *userp) -> size_t
+                     {
         userp->append((char*)contents, size * nmemb);
-        return size * nmemb;
-    });
+        return size * nmemb; });
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-    
+
     CURLcode res = curl_easy_perform(curl);
     long status_code = -1;
-    if (res == CURLE_OK) {
+    if (res == CURLE_OK)
+    {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
     }
-    
+
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
-    
+
     return {status_code, response};
 }
 
-int main() {
+int main()
+{
     std::cout << "🌍 Environment Detection Test..." << std::endl;
 
     // Test environments and endpoints
@@ -57,26 +63,29 @@ int main() {
         {"Production Portfolios", "https://api.coinbase.com", "/api/v3/brokerage/portfolios", "View"},
         {"Sandbox Portfolios", "https://api.sandbox.coinbase.com", "/api/v3/brokerage/portfolios", "View"},
         {"Production Accounts", "https://api.coinbase.com", "/api/v3/brokerage/accounts", "View"},
-        {"Sandbox Accounts", "https://api.sandbox.coinbase.com", "/api/v3/brokerage/accounts", "View"}
-    };
+        {"Sandbox Accounts", "https://api.sandbox.coinbase.com", "/api/v3/brokerage/accounts", "View"}};
 
-    try {
+    try
+    {
         // Load credentials for authenticated tests
         auto creds = coinbase_dtc_core::auth::CDPCredentials::from_json_file("secrets/cdp_api_key_ECDSA.json");
-        if (!creds.is_valid()) {
+        if (!creds.is_valid())
+        {
             std::cout << "❌ No valid credentials found!" << std::endl;
             return 1;
         }
 
         coinbase_dtc_core::auth::JWTAuthenticator auth(creds);
 
-        for (const auto& test : tests) {
+        for (const auto &test : tests)
+        {
             std::cout << "\n🧪 Testing " << test.name << "..." << std::endl;
             std::cout << "   URL: " << test.base_url << test.path << std::endl;
             std::cout << "   Required Permission: " << test.expected_permission << std::endl;
 
             std::string jwt_token = "";
-            if (test.expected_permission != "None") {
+            if (test.expected_permission != "None")
+            {
                 jwt_token = auth.generate_token("GET", test.path, "");
             }
 
@@ -84,26 +93,41 @@ int main() {
             auto [status, response] = make_request(url, jwt_token);
 
             std::cout << "   Status: " << status;
-            
-            if (status == 200) {
+
+            if (status == 200)
+            {
                 std::cout << " ✅ SUCCESS!" << std::endl;
-                if (response.length() > 100) {
+                if (response.length() > 100)
+                {
                     std::cout << "   Response: " << response.substr(0, 100) << "..." << std::endl;
-                } else {
+                }
+                else
+                {
                     std::cout << "   Response: " << response << std::endl;
                 }
-            } else if (status == 401) {
+            }
+            else if (status == 401)
+            {
                 std::cout << " ❌ Unauthorized" << std::endl;
-                if (test.expected_permission == "None") {
+                if (test.expected_permission == "None")
+                {
                     std::cout << "   ⚠️  Unexpected - public endpoint should work!" << std::endl;
                 }
-            } else if (status == 403) {
+            }
+            else if (status == 403)
+            {
                 std::cout << " ⚠️  Forbidden (insufficient permissions)" << std::endl;
-            } else if (status == 404) {
+            }
+            else if (status == 404)
+            {
                 std::cout << " 🔍 Not Found (wrong environment?)" << std::endl;
-            } else if (status == -1) {
+            }
+            else if (status == -1)
+            {
                 std::cout << " ❌ Network Error" << std::endl;
-            } else {
+            }
+            else
+            {
                 std::cout << " ❓ Other: " << response << std::endl;
             }
         }
@@ -112,8 +136,9 @@ int main() {
         std::cout << "   - If sandbox endpoints work: Your key is for sandbox environment" << std::endl;
         std::cout << "   - If production endpoints work: Your key is for production environment" << std::endl;
         std::cout << "   - If both fail: Check API key activation or JWT format" << std::endl;
-
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception &e)
+    {
         std::cout << "❌ Test failed: " << e.what() << std::endl;
         return 1;
     }
