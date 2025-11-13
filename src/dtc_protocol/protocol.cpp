@@ -271,6 +271,14 @@ std::unique_ptr<DTCMessage> Protocol::parse_message(const uint8_t* data, uint16_
             break;
         }
         
+        case MessageType::LOGON_RESPONSE: {
+            auto msg = std::make_unique<LogonResponse>();
+            if (msg->deserialize(data, size)) {
+                return std::move(msg);
+            }
+            break;
+        }
+        
         case MessageType::MARKET_DATA_REQUEST: {
             auto msg = std::make_unique<MarketDataRequest>();
             if (msg->deserialize(data, size)) {

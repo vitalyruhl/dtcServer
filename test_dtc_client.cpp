@@ -56,6 +56,17 @@ public:
             return false;
         }
         
+        // Set socket timeout for recv operations
+        #ifdef _WIN32
+        DWORD timeout = 1000; // 1 second timeout
+        setsockopt(socket_, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
+        #else
+        struct timeval timeout;
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+        setsockopt(socket_, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+        #endif
+        
         std::cout << "[OK] Connected to DTC server at " << host_ << ":" << port_ << std::endl;
         return true;
     }
