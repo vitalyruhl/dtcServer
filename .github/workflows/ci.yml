@@ -74,11 +74,14 @@ jobs:
     - name: Run Tests
       run: |
         cd build
-        # Run the working tests with proper error handling
+        # Run the working standalone tests with proper error handling
         echo "Running BasicTest..."
         ctest --build-config ${{ matrix.build_type }} --tests-regex "BasicTest" --output-on-failure --verbose
         echo "Running DTCProtocolTest..."
         ctest --build-config ${{ matrix.build_type }} --tests-regex "DTCProtocolTest" --output-on-failure --verbose
+        echo "Running DTCProtocolLegacyTest..."
+        ctest --build-config ${{ matrix.build_type }} --tests-regex "DTCProtocolLegacyTest" --output-on-failure --verbose
+        echo "✅ All standalone tests completed successfully"
 
     - name: Upload build artifacts (Core Libraries)
       uses: actions/upload-artifact@v4
