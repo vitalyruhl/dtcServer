@@ -36,7 +36,7 @@ namespace coinbase_dtc_core
                 int max_clients = 100;
 
                 // Exchange configuration
-                std::vector<exchanges::base::ExchangeConfig> exchanges;
+                std::vector<open_dtc_server::exchanges::base::ExchangeConfig> exchanges;
 
                 // Logging
                 bool enable_logging = true;
@@ -101,7 +101,7 @@ namespace coinbase_dtc_core
                  * @param exchange_config Configuration for the exchange
                  * @return true if exchange was added successfully, false otherwise
                  */
-                bool add_exchange(const exchanges::base::ExchangeConfig &exchange_config);
+                bool add_exchange(const open_dtc_server::exchanges::base::ExchangeConfig &exchange_config);
 
                 /**
                  * Remove an exchange from the server.
@@ -186,8 +186,8 @@ namespace coinbase_dtc_core
                 void handle_heartbeat(std::shared_ptr<ClientConnection> client, const std::vector<uint8_t> &data);
 
                 // Exchange callbacks
-                void on_trade_data(const exchanges::base::MarketTrade &trade);
-                void on_level2_data(const exchanges::base::MarketLevel2 &level2);
+                void on_trade_data(const open_dtc_server::exchanges::base::MarketTrade &trade);
+                void on_level2_data(const open_dtc_server::exchanges::base::MarketLevel2 &level2);
                 void on_exchange_connection(bool connected, const std::string &exchange);
                 void on_exchange_error(const std::string &error, const std::string &exchange);
 
@@ -208,10 +208,10 @@ namespace coinbase_dtc_core
                 std::thread heartbeat_thread_;
 
                 // Protocol handling
-                std::unique_ptr<dtc::Protocol> protocol_;
+                std::unique_ptr<open_dtc_server::core::dtc::Protocol> protocol_;
 
                 // Exchange management
-                std::unique_ptr<exchanges::base::MultiExchangeFeed> multi_feed_;
+                std::unique_ptr<open_dtc_server::exchanges::base::MultiExchangeFeed> multi_feed_;
                 std::mutex exchanges_mutex_;
 
                 // Client management
