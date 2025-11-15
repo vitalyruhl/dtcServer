@@ -482,3 +482,25 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_websocket_connection.cpp")
         target_link_libraries(test_websocket_connection ws2_32)
     endif()
 endif()
+
+# SSL WebSocket test executable
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_ssl_websocket.cpp")
+    add_executable(test_ssl_websocket tests/test_ssl_websocket.cpp)
+    target_link_libraries(test_ssl_websocket coinbase_feed exchange_base dtc_util)
+    target_include_directories(test_ssl_websocket PRIVATE include)
+    
+    if(WIN32)
+        target_link_libraries(test_ssl_websocket ws2_32 crypt32 secur32)
+    endif()
+endif()
+
+# Basic WebSocket test executable
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_basic.cpp")
+    add_executable(test_websocket_basic tests/test_websocket_basic.cpp)
+    target_link_libraries(test_websocket_basic coinbase_feed exchange_base dtc_util)
+    target_include_directories(test_websocket_basic PRIVATE include)
+    
+    if(WIN32)
+        target_link_libraries(test_websocket_basic ws2_32)
+    endif()
+endif()

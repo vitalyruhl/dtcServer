@@ -13,6 +13,14 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
+#define SECURITY_WIN32 // Required for SSL/TLS
+// SSL/TLS support for Windows
+#include <wincrypt.h>
+#include <security.h>
+#include <sspi.h>
+#include <schannel.h>
+#pragma comment(lib, "crypt32.lib")
+#pragma comment(lib, "secur32.lib")
 typedef int ssize_t;
 #else
 #include <sys/socket.h>
@@ -31,6 +39,11 @@ namespace open_dtc_server
             WebSocketClient::WebSocketClient()
                 : connected_(false), should_stop_(false), socket_(-1),
                   host_("ws-feed.exchange.coinbase.com"), port_(443),
+                  ssl_initialized_(false),
+#ifdef _WIN32
+                  ssl_creds_(nullptr), ssl_context_(nullptr),
+                  ssl_context_valid_(false),
+#endif
                   messages_received_(0), messages_sent_(0), last_message_time_(0)
             {
 #ifdef _WIN32
@@ -40,13 +53,18 @@ namespace open_dtc_server
                 {
                     util::log("[ERROR] WSAStartup failed: " + std::to_string(result));
                 }
+
+                // SSL support disabled for basic testing
+                ssl_creds_ = nullptr;
+                ssl_context_ = nullptr;
 #endif
             }
-
             WebSocketClient::~WebSocketClient()
             {
                 disconnect();
+                cleanup_ssl();
 #ifdef _WIN32
+                // SSL handles cleanup - currently disabled
                 WSACleanup();
 #endif
             }
@@ -232,6 +250,7 @@ namespace open_dtc_server
 
             void WebSocketClient::cleanup_socket()
             {
+                cleanup_ssl();
                 if (socket_ != -1)
                 {
 #ifdef _WIN32
@@ -246,6 +265,8 @@ namespace open_dtc_server
             // WebSocket protocol helpers (real implementation)
             bool WebSocketClient::establish_websocket_connection()
             {
+                util::log("[INFO] Note: SSL/TLS support not yet implemented - testing basic TCP connection");
+
                 // Create TCP socket
                 socket_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
                 if (socket_ == -1)
@@ -278,10 +299,12 @@ namespace open_dtc_server
                     return false;
                 }
 
-                // Perform WebSocket handshake
+                util::log("[INFO] TCP connection established to " + host_ + ":" + std::to_string(port_));
+
+                // Perform WebSocket handshake (will fail without SSL, but tests protocol)
                 if (!perform_websocket_handshake())
                 {
-                    util::log("[ERROR] WebSocket handshake failed");
+                    util::log("[INFO] WebSocket handshake failed (expected without SSL/TLS)");
                     cleanup_socket();
                     return false;
                 }
@@ -307,20 +330,20 @@ namespace open_dtc_server
 
                 std::string handshake = request.str();
 
-                // Send handshake request
+                // Send handshake request via TCP
                 ssize_t sent = send(socket_, handshake.c_str(), handshake.length(), 0);
                 if (sent != (ssize_t)handshake.length())
                 {
-                    util::log("[ERROR] Failed to send WebSocket handshake");
+                    util::log("[ERROR] Failed to send WebSocket handshake via TCP");
                     return false;
                 }
 
-                // Read handshake response
+                // Read handshake response via TCP
                 char buffer[4096];
                 ssize_t received = recv(socket_, buffer, sizeof(buffer) - 1, 0);
                 if (received <= 0)
                 {
-                    util::log("[ERROR] Failed to receive WebSocket handshake response");
+                    util::log("[ERROR] Failed to receive WebSocket handshake response via TCP");
                     return false;
                 }
 
@@ -348,11 +371,11 @@ namespace open_dtc_server
                 // Encode WebSocket frame
                 std::string frame = encode_websocket_frame(payload);
 
-                // Send frame
+                // Send frame via regular TCP (SSL disabled for now)
                 ssize_t sent = send(socket_, frame.c_str(), frame.length(), 0);
                 if (sent != (ssize_t)frame.length())
                 {
-                    util::log("[ERROR] Failed to send WebSocket frame");
+                    util::log("[ERROR] Failed to send WebSocket frame via TCP");
                     return false;
                 }
 
@@ -440,9 +463,7 @@ namespace open_dtc_server
                 last_message_time_ = get_current_timestamp();
 
                 return fin && opcode == 0x1; // Text frame
-            }
-
-            // Message creation and parsing (Coinbase-specific)
+            } // Message creation and parsing (Coinbase-specific)
             std::string WebSocketClient::create_subscribe_message(const std::string &channel, const std::string &product_id) const
             {
                 // TODO: Create Coinbase WebSocket subscription message
@@ -697,6 +718,64 @@ namespace open_dtc_server
                 // TODO: Calculate WebSocket accept header value
                 return "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=";
             }
+
+#ifdef _WIN32
+            bool WebSocketClient::initialize_ssl()
+            {
+                util::log("[INFO] SSL support not yet implemented - using TCP fallback");
+                return false;
+            }
+
+            bool WebSocketClient::perform_ssl_handshake()
+            {
+                util::log("[INFO] SSL handshake not yet implemented - using TCP fallback");
+                return false;
+            }
+
+            ssize_t WebSocketClient::ssl_send(const void *data, size_t len)
+            {
+                // Fallback to regular TCP send for now
+                return send(socket_, static_cast<const char *>(data), static_cast<int>(len), 0);
+            }
+
+            ssize_t WebSocketClient::ssl_receive(void *data, size_t len)
+            {
+                // Fallback to regular TCP receive for now
+                return recv(socket_, static_cast<char *>(data), static_cast<int>(len), 0);
+            }
+
+            void WebSocketClient::cleanup_ssl()
+            {
+                // Nothing to clean up in stub implementation
+            }
+#else
+            // Placeholder implementations for non-Windows platforms
+            bool WebSocketClient::initialize_ssl()
+            {
+                util::log("[ERROR] SSL support not implemented for this platform");
+                return false;
+            }
+
+            bool WebSocketClient::perform_ssl_handshake()
+            {
+                util::log("[ERROR] SSL support not implemented for this platform");
+                return false;
+            }
+
+            ssize_t WebSocketClient::ssl_send(const void *data, size_t len)
+            {
+                return -1;
+            }
+
+            ssize_t WebSocketClient::ssl_receive(void *data, size_t len)
+            {
+                return -1;
+            }
+
+            void WebSocketClient::cleanup_ssl()
+            {
+            }
+#endif
 
         } // namespace coinbase
     } // namespace feed

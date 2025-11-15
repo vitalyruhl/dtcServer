@@ -15,6 +15,9 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
+#define SECURITY_WIN32 // Required for SSL/TLS
+typedef int ssize_t;   // Define ssize_t for Windows
+// Use void* for SSL handles in header to avoid conflicts
 #else
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -83,6 +86,13 @@ namespace open_dtc_server
                 bool send_websocket_frame(const std::string &payload);
                 bool receive_websocket_frame(std::string &payload);
 
+                // SSL/TLS support
+                bool initialize_ssl();
+                bool perform_ssl_handshake();
+                ssize_t ssl_send(const void *data, size_t len);
+                ssize_t ssl_receive(void *data, size_t len);
+                void cleanup_ssl();
+
                 // Message handling
                 std::string create_subscribe_message(const std::string &channel, const std::string &product_id) const;
                 std::string create_unsubscribe_message(const std::string &product_id) const;
@@ -106,6 +116,14 @@ namespace open_dtc_server
                 int socket_;
                 std::string host_;
                 uint16_t port_;
+
+                // SSL/TLS state
+                bool ssl_initialized_;
+#ifdef _WIN32
+                void *ssl_creds_;   // CredHandle*
+                void *ssl_context_; // CtxtHandle*
+                bool ssl_context_valid_;
+#endif
 
                 // Threading
                 std::thread worker_thread_;
