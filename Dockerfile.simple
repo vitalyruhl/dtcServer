@@ -1,0 +1,40 @@
+# Temporary simple Dockerfile for testing
+FROM ubuntu:22.04
+
+# Install all dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    curl \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install JWT-CPP
+RUN git clone --depth 1 --branch v0.7.1 https://github.com/Thalhammer/jwt-cpp.git /tmp/jwt-cpp && \
+    cd /tmp/jwt-cpp && \
+    cmake -B build -DCMAKE_INSTALL_PREFIX=/usr/local -DJWT_BUILD_EXAMPLES=OFF && \
+    cmake --build build --parallel && \
+    cmake --install build && \
+    rm -rf /tmp/jwt-cpp
+
+WORKDIR /app
+COPY . .
+
+# Build the project
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=OFF
+RUN cmake --build build --parallel $(nproc)
+
+# Create non-root user for security
+RUN useradd -r -s /bin/false dtcserver
+
+# Switch to non-root user
+USER dtcserver
+
+# Expose port for DTC server
+EXPOSE 11099
+
+# Run the server directly from build directory
+CMD ["/app/build/coinbase_dtc_server"]

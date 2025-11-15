@@ -31,7 +31,7 @@ int main()
     {
         // Create server configuration
         ServerConfig config;
-        config.bind_address = "127.0.0.1";
+        config.bind_address = "0.0.0.0"; // Allow connections from any interface
         config.port = 11099;
         config.server_name = "CoinbaseDTCServer";
         config.password = "";

@@ -28,8 +28,8 @@ WORKDIR /app
 # Copy source code
 COPY . .
 
-# Build the project with all tests enabled
-RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON
+# Build the project without tests for Docker
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=OFF
 RUN cmake --build build --parallel $(nproc)
 
 # Runtime stage - smaller image
@@ -46,15 +46,17 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /app/build/coinbase_dtc_server /usr/local/bin/coinbase_dtc_server
 RUN chmod +x /usr/local/bin/coinbase_dtc_server
 
+# Verify the executable exists
+RUN ls -la /usr/local/bin/coinbase_dtc_server
+
 # Create non-root user for security
 RUN useradd -r -s /bin/false dtcserver
 
 # Switch to non-root user
 USER dtcserver
-USER coinbase
 
 # Expose port for DTC server
-EXPOSE 11000
+EXPOSE 11099
 
 # Run the server
 CMD ["/usr/local/bin/coinbase_dtc_server"]

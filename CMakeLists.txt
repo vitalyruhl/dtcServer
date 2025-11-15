@@ -170,7 +170,7 @@ target_link_libraries(coinbase_dtc_server PRIVATE
     dtc_auth
     dtc_test
     dtc_server
-    exchange_factory
+    # exchange_factory  # TEMPORARY: Disabled for Docker build
     exchange_base
     coinbase_feed
     binance_feed

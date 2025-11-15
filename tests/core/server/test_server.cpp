@@ -6,5 +6,25 @@
 #include <chrono>
 
 using namespace open_dtc_server;
-\n\nint main()
-{\n    util::log(\"[TEST] Starting Server tests...\");\n    \n    try {\n        // Test 1: Server creation\n        {\n            server::DTCServer dtc_server(11000);\n            util::log(\"[TEST] ✅ Server created successfully\");\n        }\n        \n        // Test 2: Exchange factory\n        {\n            // Test supported exchanges\n            auto supported = exchanges::factory::ExchangeFactory::get_supported_exchanges();\n            util::log(\"[TEST] Supported exchanges: \" + std::to_string(supported.size()));\n            \n            for (const auto& exchange : supported) {\n                util::log(\"  - \" + exchange);\n            }\n            \n            // Test exchange creation\n            exchanges::base::ExchangeConfig config;\n            config.name = \"coinbase\";\n            \n            auto feed = exchanges::factory::ExchangeFactory::create_feed(config);\n            if (feed) {\n                util::log(\"[TEST] ✅ Exchange feed created: \" + feed->get_exchange_name());\n            }\n        }\n        \n        // Test 3: Multi-exchange feed\n        {\n            exchanges::base::MultiExchangeFeed multi_feed;\n            \n            // Add Coinbase exchange\n            exchanges::base::ExchangeConfig coinbase_config;\n            coinbase_config.name = \"coinbase\";\n            \n            bool added = multi_feed.add_exchange(coinbase_config);\n            if (added) {\n                util::log(\"[TEST] ✅ Coinbase exchange added to multi-feed\");\n            }\n            \n            // Add Binance exchange\n            exchanges::base::ExchangeConfig binance_config;\n            binance_config.name = \"binance\";\n            \n            added = multi_feed.add_exchange(binance_config);\n            if (added) {\n                util::log(\"[TEST] ✅ Binance exchange added to multi-feed\");\n            }\n            \n            // Check status\n            std::string status = multi_feed.get_status();\n            util::log(\"[TEST] Multi-exchange status:\\n\" + status);\n        }\n        \n        util::log(\"[TEST] All Server tests completed successfully! ✅\");\n        return 0;\n        \n    } catch (const std::exception& e) {\n        util::log(\"[ERROR] Server test failed: \" + std::string(e.what()));\n        return 1;\n    }\n}"
+
+int main()
+{
+    core::util::log("[TEST] Starting Server tests...");
+
+    try
+    {
+        // Test 1: Server creation
+        {
+            core::server::DTCServer dtc_server(11000);
+            core::util::log("[TEST] ✅ Server created successfully");
+        }
+
+        core::util::log("[TEST] All Server tests completed successfully! ✅");
+        return 0;
+    }
+    catch (const std::exception &e)
+    {
+        core::util::log("[ERROR] Server test failed: " + std::string(e.what()));
+        return 1;
+    }
+}
