@@ -1,195 +1,140 @@
 # TODO List - Coinbase DTC Core
 
-## ✅ COMPLETED - Phase 1: JWT Authentication & DTC Foundation
-- [x] **JWT Authentication System** - Complete implementation with RS256, token validation, expiration handling
-- [x] **Coinbase Advanced Trade API** - REST client with proper authentication, order placement, portfolio management
+## ✅ COMPLETED - Phase 1: Core Infrastructure
 - [x] **DTC Protocol v8 Implementation** - Complete message types (LogonRequest/Response, MarketDataRequest, Trade/BidAsk updates)
-- [x] **TCP Socket Server** - Multi-threaded Windows Socket server with client session management
-- [x] **Critical Bug Fix** - Resolved vtable corruption in DTC message serialization (memcpy(this) → field-by-field)
-- [x] **Live Market Data Streaming** - Successfully receiving and parsing real-time trades and order book data
-- [x] **GitHub Actions CI/CD** - Fixed secrets syntax, branch triggers, comprehensive test suite
-- [x] **Protocol Implementation Completed** - Added missing Protocol class methods (create_logon_response, create_trade_update, etc.)
-- [x] **Comprehensive Testing** - All core DTC protocol tests passing (BasicTest, DTCProtocolTest, DTCProtocolLegacyTest)
-- [x] **Professional CI Engineering** - CI tests actual functionality instead of partial builds
+- [x] **TCP Socket Server** - Multi-threaded Windows Socket server with client session management 
+- [x] **Windows GUI Test Client** - Complete DTC client with connection testing and market data display
+- [x] **Socket Communication** - Successfully tested client-server connection on port 11099
+- [x] **Build System** - CMake with Visual Studio 2022, all targets building successfully
+- [x] **Project Structure** - Organized source tree with proper namespaces
 
-## 🚧 CURRENT PRIORITY - Phase 2: Real Coinbase Data Integration
+## 🚧 CURRENT PRIORITY - Phase 2: Real Coinbase Integration
 
-### 1. **IMMEDIATE - Server Namespace Migration**
-- [ ] Fix server components namespace mismatch (coinbase_dtc_core vs open_dtc_server)
-- [ ] Complete server.cpp namespace migration to open_dtc_server
-- [ ] Test server functionality with corrected namespaces
-- [ ] Re-enable server components in CI builds
+### 1. **IMMEDIATE - Replace All Mock Data**
+- [ ] **Coinbase Advanced Trade REST API Integration**
+  - [ ] Implement account information endpoint (/api/v3/brokerage/accounts)
+  - [ ] Add portfolio/balances retrieval 
+  - [ ] Implement symbol/products listing (/api/v3/brokerage/products)
+  - [ ] Add authentication with API keys from environment variables
+- [ ] **Real Market Data via WebSocket**
+  - [ ] Connect to Coinbase Advanced Trade WebSocket feed
+  - [ ] Subscribe to real-time ticker updates for BTC-USD, ETH-USD etc.
+  - [ ] Parse and forward live price data to DTC clients
+  - [ ] Replace [MOCK] data in GUI client with real data
+- [ ] **DTC Protocol Enhancement**
+  - [ ] Implement proper market data request handling
+  - [ ] Add symbol subscription/unsubscription 
+  - [ ] Forward real Coinbase data through DTC messages
 
-### 2. **IMMEDIATE - Fix LogonResponse Handler** 
-- [ ] Add LOGON_RESPONSE (type 2) case in client message parser
-- [ ] Test complete authentication flow end-to-end
-- [ ] Verify logon response contains correct user data
+### 2. **Configuration & Environment Setup**
+- [ ] **API Credentials Management**
+  - [ ] Add environment variable support for Coinbase API keys
+  - [ ] Create .env file template with required variables
+  - [ ] Add credential validation on server startup
+- [ ] **Configuration System**
+  - [ ] JSON config file for server settings (port, symbols, etc.)
+  - [ ] Runtime configuration validation
+  - [ ] Add configuration documentation
 
-### 2. **Coinbase WebSocket Integration**
-- [ ] Replace simulated market data with real Coinbase WebSocket feed
-- [ ] Implement WebSocket client for Coinbase Pro API
-- [ ] Add WebSocket reconnection and error handling
-- [ ] Parse real BTC-USD trade and level2 data
-- [ ] Map Coinbase data to DTC message format
-
-### 3. **Multi-Symbol Support**
-- [ ] Add symbol management (BTC-USD, ETH-USD, etc.)
-- [ ] Implement symbol ID mapping between Coinbase and DTC
-- [ ] Update MarketDataRequest to handle multiple symbols
-- [ ] Add subscription management for different trading pairs
-
-### 4. **Enhanced Client Features**
-- [ ] Add multiple client connection testing
-- [ ] Implement client disconnection handling
-- [ ] Add heartbeat/keepalive mechanism
-- [ ] Create comprehensive integration tests
+### 3. **Error Handling & Robustness**  
+- [ ] **Coinbase API Error Handling**
+  - [ ] Handle authentication failures gracefully
+  - [ ] Add rate limiting and retry logic
+  - [ ] Implement connection recovery for WebSocket
+- [ ] **DTC Client Error Handling**
+  - [ ] Proper error messages for failed API calls
+  - [ ] Connection timeout and retry mechanisms
+  - [ ] Clear indication when server is in mock mode vs live mode
 
 ## Phase 3: Production Features 🚀
 
-### 5. Historical Data & Database
-- [ ] Choose database solution (SQLite for development)
-- [ ] Design schema for historical OHLCV data
-- [ ] Implement historical data API endpoints
-- [ ] Add data persistence for market data
-- [ ] Create data gap detection and backfilling
+### 4. **Historical Data & Persistence**
+- [ ] **Database Integration**
+  - [ ] Choose and implement database solution (SQLite/PostgreSQL)
+  - [ ] Schema for OHLCV historical data storage
+  - [ ] Data backfilling from Coinbase REST API
+- [ ] **Historical Data Serving**
+  - [ ] DTC historical data server implementation
+  - [ ] Integration with Sierra Chart for historical requests
+  - [ ] Efficient data compression and caching
 
-### 6. Configuration & Logging
-- [ ] Create JSON configuration system (server port, symbols, etc.)
-- [ ] Implement structured logging with different levels
-- [ ] Add performance metrics and monitoring
-- [ ] Create health check endpoints
+### 5. **Sierra Chart Integration**
+- [ ] **DTC Compatibility Testing**
+  - [ ] Test with actual Sierra Chart installation
+  - [ ] Verify message format compatibility
+  - [ ] Performance optimization for high-frequency updates
+- [ ] **Documentation & Setup**
+  - [ ] Sierra Chart configuration guide
+  - [ ] Installation and setup instructions
+  - [ ] Troubleshooting documentation
 
-### 7. Error Handling & Resilience
-- [ ] Add comprehensive error recovery for WebSocket disconnections
-- [ ] Implement circuit breaker for Coinbase API
-- [ ] Add graceful shutdown handling
-- [ ] Create retry mechanisms with exponential backoff
+### 6. **Advanced Features**
+- [ ] **Multi-Symbol Support**
+  - [ ] Dynamic symbol management
+  - [ ] Subscription-based data filtering
+  - [ ] Symbol mapping between Coinbase and DTC formats
+- [ ] **Performance Optimization**
+  - [ ] Message serialization optimization
+  - [ ] Memory usage profiling and optimization
+  - [ ] Network I/O efficiency improvements
 
-## Phase 4: Advanced Features 📈
+## Phase 4: Scaling & Production 📈
 
-### 8. Sierra Chart Integration
-- [ ] Test DTC server with actual Sierra Chart client
-- [ ] Optimize data format for Sierra Chart compatibility
-- [ ] Add historical data serving via DTC Historical Data Server
-- [ ] Create Sierra Chart configuration documentation
-- [ ] Add intraday and tick data support
+### 7. **Monitoring & Logging**
+- [ ] **Structured Logging System**
+  - [ ] JSON-formatted logs with different levels
+  - [ ] Performance metrics collection
+  - [ ] Real-time monitoring dashboard
+- [ ] **Health Checks & Alerting**
+  - [ ] System health endpoints
+  - [ ] Connection monitoring
+  - [ ] Automated alert system
 
-### 9. Performance Optimization
-- [ ] Profile message serialization performance
-- [ ] Optimize memory usage for high-frequency data
-- [ ] Add connection pooling and load balancing
-- [ ] Implement data compression for network efficiency
-
-### 10. Multi-Exchange Support
-- [ ] Abstract exchange interface
-- [ ] Add Binance, Kraken support
-- [ ] Implement unified symbol mapping
-- [ ] Create exchange-agnostic data models
-
-## Phase 4: Production Features 🚀
-
-### 8. Configuration Management
-- [ ] Create configuration file system (JSON/YAML)
-- [ ] Add environment variable support
-- [ ] Implement configuration validation
-- [ ] Add runtime configuration updates
-- [ ] Create configuration documentation
-- [ ] Add configuration templates for different use cases
-
-### 9. Logging and Monitoring
-- [ ] Implement structured logging (JSON format)
-- [ ] Add log levels and filtering
-- [ ] Create metrics collection system
-- [ ] Add performance monitoring
-- [ ] Implement health checks
-- [ ] Add alerting system
-- [ ] Create monitoring dashboards
-
-### 10. Error Handling and Resilience
-- [ ] Implement circuit breaker pattern for API calls
-- [ ] Add graceful shutdown handling
-- [ ] Create error recovery mechanisms
-- [ ] Add comprehensive error logging
-- [ ] Implement failover strategies
-- [ ] Add system resource monitoring
-
-## Phase 5: Performance and Scaling 📈
-
-### 11. Performance Optimization
-- [ ] Profile application performance
-- [ ] Optimize database queries
-- [ ] Implement caching strategies
-- [ ] Add memory pool management
-- [ ] Optimize network I/O
-- [ ] Add multi-threading support
-
-### 12. Testing and Quality Assurance
-- [ ] Expand unit test coverage (target: >80%)
-- [ ] Add integration tests
-- [ ] Create end-to-end tests with Sierra Chart
-- [ ] Add performance benchmarks
-- [ ] Implement load testing
-- [ ] Add security testing
-
-### 13. Documentation and Examples
-- [ ] Create API documentation
-- [ ] Add deployment guides
-- [ ] Create Sierra Chart setup tutorial
-- [ ] Add troubleshooting guide
-- [ ] Create performance tuning guide
-- [ ] Add example configurations
-
-## Phase 6: Advanced Features 🎯
-
-### 14. Multi-Exchange Support
-- [ ] Abstract exchange interface
-- [ ] Add support for other exchanges (Binance, Kraken, etc.)
-- [ ] Implement exchange-agnostic data models
-- [ ] Add exchange-specific configurations
-- [ ] Create unified symbol mapping
-
-### 15. Advanced Data Features (Pro Version)
-- [ ] Add orderbook depth data
-- [ ] Trading functionality via DTC protocol Buy/sell orders, TP/SL
-- [ ] Add advanced Trading functionality features - trailing stops, OCO orders, etc.
-- [ ] Implement trade aggregation
-- [ ] Create data export functionality
-- [ ] Add data compression algorithms
-- [ ] Implement data archiving
+### 8. **Multi-Exchange Support** 
+- [ ] **Exchange Abstraction**
+  - [ ] Generic exchange interface
+  - [ ] Plugin architecture for new exchanges
+  - [ ] Unified data models across exchanges
+- [ ] **Additional Exchange Support**
+  - [ ] Binance integration
+  - [ ] Kraken integration  
+  - [ ] Exchange-specific configuration
 
 ---
 
 ## Priority Levels
 
-- **P0 (IMMEDIATE)**: Fix LogonResponse parsing, integrate real Coinbase WebSocket data
-- **P1 (HIGH)**: Multi-symbol support, enhanced client features, configuration system  
-- **P2 (MEDIUM)**: Historical data, database integration, Sierra Chart testing
-- **P3 (LOW)**: Performance optimization, multi-exchange support
+- **P0 (IMMEDIATE)**: Remove all [MOCK] data, implement real Coinbase API integration
+- **P1 (HIGH)**: Configuration management, error handling, environment setup
+- **P2 (MEDIUM)**: Historical data, Sierra Chart testing, performance optimization
+- **P3 (LOW)**: Multi-exchange support, advanced monitoring features
 
 ## Current Sprint Focus
 
-**Sprint Current**: 
-1. Fix LogonResponse handler in client
-2. Replace simulated data with real Coinbase WebSocket feed
-3. Add multi-symbol support and subscription management
+**Sprint Goal**: Replace all mock data with live Coinbase Advanced Trade API integration
 
-**Target**: Complete real-time Coinbase data integration with full DTC compatibility
+**Tasks This Sprint**:
+1. Remove [MOCK] labels by implementing real Coinbase account API calls
+2. Add WebSocket connection for real-time market data
+3. Configure environment variables for API credentials
+4. Test end-to-end with real Coinbase account
+
+**Definition of Done**: GUI client shows real account balances, real symbol prices, no [MOCK] labels anywhere
 
 ---
 
 ## Recent Achievements 🎉
 
-- **Breakthrough**: Fixed critical vtable serialization bug causing 8-byte garbage prefixes
-- **Success**: Live market data streaming working (11 messages/15s with correct parsing)
-- **Milestone**: Complete DTC protocol implementation with proper field-by-field serialization
-- **Achievement**: Multi-threaded TCP server handling concurrent client connections
+- **Milestone**: Working DTC server with TCP socket implementation
+- **Success**: GUI client successfully connects and communicates with server
+- **Foundation**: Complete build system and development environment
+- **Clarity**: All mock data clearly labeled to prevent confusion
 
 ---
 
-## Technical Notes
+## Technical Debt & Cleanup
 
-- All DTC message types now use safe serialization without vtable corruption
-- Client successfully receives Trade Updates (type 107) and OrderBook Updates (type 108)
-- Server handles authentication flow and broadcasts simulated market data
-- Message sizes correctly calculated: Trade=32 bytes, Book=48 bytes, LogonResponse=176 bytes
-- System tested on Windows with PowerShell, Visual Studio 2022, CMake build system
+- **Namespace Migration**: Some components still use mixed namespaces (coinbase_dtc_core vs open_dtc_server)
+- **Code Documentation**: Need comprehensive API documentation
+- **Test Coverage**: Expand unit and integration test coverage
+- **Security Review**: Audit credential handling and API security

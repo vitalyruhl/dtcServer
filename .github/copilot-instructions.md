@@ -73,4 +73,13 @@
  * - Example structure: /dev-info/coinbase-api/endpoints.md, /dev-info/coinbase-api/authentication.md
  * - Include version info and last-updated dates in saved documentation
  * - This prevents unnecessary re-fetching and preserves valuable research
+ * 
+ * TODO Management & Project Tracking:
+ * - ALWAYS keep /dev-info/TODO.md updated with current project status
+ * - Update TODO.md immediately after completing any major feature or milestone
+ * - Mark tasks as ✅ COMPLETED when done, 🚧 CURRENT when working on them
+ * - Add new priorities and features as they emerge during development
+ * - Reference TODO.md to understand current priorities and completed work
+ * - Mock/Demo Data Policy: All simulated data MUST be clearly labeled with [MOCK] prefix
+ * - Never present fake data as real without explicit warning to user
  */

@@ -12,6 +12,11 @@
 #include <vector>
 #include <functional>
 
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
+
 namespace coinbase_dtc_core
 {
     namespace core
@@ -191,6 +196,12 @@ namespace coinbase_dtc_core
                 void on_exchange_connection(bool connected, const std::string &exchange);
                 void on_exchange_error(const std::string &error, const std::string &exchange);
 
+                // Socket management
+                bool initialize_sockets();
+                void cleanup_sockets();
+                bool create_server_socket();
+                void close_server_socket();
+
                 // Utilities
                 uint32_t get_or_create_symbol_id(std::shared_ptr<ClientConnection> client, const std::string &symbol);
                 std::string normalize_symbol_for_client(const std::string &symbol);
@@ -224,6 +235,14 @@ namespace coinbase_dtc_core
                 std::unordered_map<uint32_t, std::string> global_id_to_symbol_;
                 std::atomic<uint32_t> next_global_symbol_id_{1};
                 std::mutex symbols_mutex_;
+
+                // Socket management
+#ifdef _WIN32
+                SOCKET server_socket_{INVALID_SOCKET};
+#else
+                int server_socket_{-1};
+#endif
+                bool winsock_initialized_{false};
 
                 // Statistics
                 std::atomic<uint64_t> total_messages_sent_{0};
@@ -268,4 +287,4 @@ namespace coinbase_dtc_core
 
         } // namespace server
     } // namespace core
-} // namespace open_dtc_server
+} // namespace coinbase_dtc_core

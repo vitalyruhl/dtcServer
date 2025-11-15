@@ -503,3 +503,85 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_basic.cpp")
         target_link_libraries(test_websocket_basic ws2_32)
     endif()
 endif()
+
+# DTC Test Client - GUI application for testing DTC server
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/dtc_test_client/main_gui.cpp")
+    add_executable(dtc_test_client_gui
+        src/dtc_test_client/main_gui.cpp
+        src/dtc_test_client/dtc_gui_client.cpp
+    )
+    
+    target_include_directories(dtc_test_client_gui PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/dtc_test_client
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/dtc_test_client
+    )
+    
+    target_link_libraries(dtc_test_client_gui PRIVATE
+        dtc_protocol
+        dtc_util
+    )
+    
+    # Windows-specific libraries for GUI application
+    if(WIN32)
+        target_link_libraries(dtc_test_client_gui PRIVATE 
+            ws2_32 
+            user32 
+            gdi32 
+            comctl32
+            shell32
+        )
+        # Set subsystem to Windows GUI
+        set_target_properties(dtc_test_client_gui PROPERTIES
+            WIN32_EXECUTABLE TRUE
+            LINK_FLAGS "/SUBSYSTEM:WINDOWS"
+        )
+    else()
+        target_link_libraries(dtc_test_client_gui PRIVATE pthread)
+    endif()
+    
+    # Set target properties
+    set_target_properties(dtc_test_client_gui PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+        OUTPUT_NAME "dtc_test_client_gui"
+    )
+    
+    message(STATUS "✅ DTC Test Client Windows GUI will be built")
+endif()
+
+# DTC Test Client - Console application for testing DTC server (legacy)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/dtc_test_client/main.cpp")
+    add_executable(dtc_test_client_console
+        src/dtc_test_client/main.cpp
+        src/dtc_test_client/test_client.cpp
+    )
+    
+    target_include_directories(dtc_test_client_console PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/dtc_test_client
+    )
+    
+    target_link_libraries(dtc_test_client_console PRIVATE
+        dtc_protocol
+        dtc_util
+    )
+    
+    # Platform-specific libraries for console input handling
+    if(WIN32)
+        target_link_libraries(dtc_test_client_console PRIVATE ws2_32 user32)
+    else()
+        target_link_libraries(dtc_test_client_console PRIVATE pthread)
+    endif()
+    
+    # Set target properties
+    set_target_properties(dtc_test_client_console PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+        OUTPUT_NAME "dtc_test_client_console"
+    )
+    
+    message(STATUS "✅ DTC Test Client Console will be built")
+endif()
