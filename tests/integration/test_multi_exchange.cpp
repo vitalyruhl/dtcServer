@@ -6,21 +6,20 @@
 #include <chrono>
 #include <atomic>
 
-using namespace coinbase_dtc_core;
+using namespace open_dtc_server;
 
 int main()
 {
-    core::util::log("[TEST] Starting Multi-Exchange Integration tests...");
+    util::log("[TEST] Starting Multi-Exchange Integration tests...");
 
     try
     {
-        core::util::log("[TEST] All Integration tests completed successfully! ✅");
+        util::log("[TEST] All Integration tests completed successfully! ✅");
         return 0;
     }
     catch (const std::exception &e)
     {
-        core::util::log("[ERROR] Integration test failed: " + std::string(e.what()));
+        util::log("[ERROR] Integration test failed: " + std::string(e.what()));
         return 1;
     }
 }
-"

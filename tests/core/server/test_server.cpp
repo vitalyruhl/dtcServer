@@ -9,22 +9,22 @@ using namespace open_dtc_server;
 
 int main()
 {
-    core::util::log("[TEST] Starting Server tests...");
+    util::log("[TEST] Starting Server tests...");
 
     try
     {
         // Test 1: Server creation
         {
-            core::server::DTCServer dtc_server(11000);
-            core::util::log("[TEST] ✅ Server created successfully");
+            coinbase_dtc_core::core::server::DTCServer dtc_server(11000);
+            util::log("[TEST] ✅ Server created successfully");
         }
 
-        core::util::log("[TEST] All Server tests completed successfully! ✅");
+        util::log("[TEST] All Server tests completed successfully! ✅");
         return 0;
     }
     catch (const std::exception &e)
     {
-        core::util::log("[ERROR] Server test failed: " + std::string(e.what()));
+        util::log("[ERROR] Server test failed: " + std::string(e.what()));
         return 1;
     }
 }
