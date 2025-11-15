@@ -55,4 +55,22 @@
  * - Efficient memory management
  * - Minimal allocation in hot paths
  * - Lock-free data structures where possible
+ * 
+ * File Organization Guidelines:
+ * - ALL documentation and development notes go in /dev-info/ directory
+ * - ALL tests (unit, integration, scripts) go in /tests/ directory
+ * - Keep root directory clean - only essential project files (CMakeLists.txt, README.md, etc.)
+ * - GitHub-specific files (.github/FUNDING.yml, SECURITY.md, etc.) stay in their conventional locations
+ * - Move obsolete or temporary files to appropriate directories or remove them
+ * 
+ * API Documentation & External Information Handling:
+ * - When fetching information from the internet (APIs, documentation, etc.):
+ *   1. Create a subdirectory in /dev-info/ for the specific source (e.g., /dev-info/coinbase-api/)
+ *   2. Save important information in organized .md files with timestamps
+ *   3. Include source URLs and fetch dates for reference
+ *   4. Before fetching new information, ALWAYS check existing /dev-info/ subdirectories first
+ *   5. Only fetch from internet if information is missing or outdated
+ * - Example structure: /dev-info/coinbase-api/endpoints.md, /dev-info/coinbase-api/authentication.md
+ * - Include version info and last-updated dates in saved documentation
+ * - This prevents unnecessary re-fetching and preserves valuable research
  */

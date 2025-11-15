@@ -62,39 +62,46 @@ namespace open_dtc_server
                 // Trading Pairs Configuration
                 namespace products
                 {
-                    // Major cryptocurrencies
-                    const std::vector<std::string> MAJOR_PAIRS = {
-                        "BTC-USD",
-                        "ETH-USD",
-                        "LTC-USD",
-                        "BCH-USD"};
+                    // Symbol validation - check if Coinbase supports requested symbols
+                    // These can be populated dynamically from Coinbase API /products endpoint
+                    namespace validation
+                    {
+                        // Common crypto symbols that are likely supported
+                        // Used for quick validation before API calls
+                        const std::vector<std::string> KNOWN_MAJORS = {
+                            "BTC-USD", "ETH-USD", "LTC-USD", "BCH-USD"};
 
-                    // Alternative cryptocurrencies
-                    const std::vector<std::string> ALT_PAIRS = {
-                        "ADA-USD",
-                        "DOT-USD",
-                        "LINK-USD",
-                        "XLM-USD",
-                        "UNI-USD",
-                        "AAVE-USD"};
+                        const std::vector<std::string> KNOWN_ALTS = {
+                            "ADA-USD", "DOT-USD", "LINK-USD", "XLM-USD", "UNI-USD", "AAVE-USD"};
 
-                    // Stablecoins
-                    const std::vector<std::string> STABLE_PAIRS = {
-                        "USDC-USD",
-                        "USDT-USD",
-                        "DAI-USD"};
+                        const std::vector<std::string> KNOWN_STABLES = {
+                            "USDC-USD", "USDT-USD", "DAI-USD"};
+                    }
 
-                    // All supported products (combined)
-                    const std::vector<std::string> ALL_SUPPORTED = {
-                        // Major
-                        "BTC-USD", "ETH-USD", "LTC-USD", "BCH-USD",
-                        // Alt coins
-                        "ADA-USD", "DOT-USD", "LINK-USD", "XLM-USD", "UNI-USD", "AAVE-USD",
-                        // Stablecoins
-                        "USDC-USD", "USDT-USD", "DAI-USD"};
+                    // Symbol discovery settings
+                    namespace discovery
+                    {
+                        // Whether to fetch available products from Coinbase API on startup
+                        constexpr bool AUTO_FETCH_PRODUCTS = true;
 
-                    // Default product for testing/examples
-                    constexpr const char *DEFAULT_PRODUCT = "BTC-USD";
+                        // Cache duration for product list (seconds)
+                        constexpr int PRODUCT_CACHE_DURATION = 3600; // 1 hour
+
+                        // API endpoint for available products
+                        constexpr const char *PRODUCTS_ENDPOINT = "/products";
+                    }
+
+                    // Default symbol for testing/examples (when no client request)
+                    constexpr const char *DEFAULT_SYMBOL = "BTC-USD";
+
+                    // Symbol format validation
+                    namespace format
+                    {
+                        constexpr const char *SEPARATOR = "-";
+                        constexpr int MAX_BASE_LENGTH = 10;   // e.g., "BTC"
+                        constexpr int MAX_QUOTE_LENGTH = 10;  // e.g., "USD"
+                        constexpr int MAX_SYMBOL_LENGTH = 21; // "SYMBOL-QUOTE" + separator
+                    }
                 }
 
                 // Historical Data Configuration
@@ -160,9 +167,15 @@ namespace open_dtc_server
                     constexpr int HEARTBEAT_INTERVAL_SECONDS = 10;
                     constexpr int CLIENT_TIMEOUT_SECONDS = 60;
 
-                    // Data settings
+                    // Symbol handling
                     constexpr int SYMBOL_LENGTH_MAX = 64;
                     constexpr int EXCHANGE_LENGTH_MAX = 16;
+                    constexpr bool AUTO_MAP_SYMBOLS = true; // Auto-map DTC symbols to Coinbase format
+                    constexpr bool VALIDATE_SYMBOLS = true; // Validate symbols before subscribing
+
+                    // Symbol request settings
+                    constexpr int MAX_SYMBOLS_PER_CLIENT = 100;
+                    constexpr int SYMBOL_REQUEST_TIMEOUT_MS = 5000;
                 }
 
                 // Database/Cache Configuration

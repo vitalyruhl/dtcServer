@@ -17,12 +17,16 @@ We're using Discussions as a central place to connect with the community: ask qu
 - ✅ Cross-platform builds (Windows MSVC + Linux GCC)
 - ✅ Docker containerization (multi-stage builds)
 - ✅ Credential management (multiple formats)
+- ✅ **NEW: Full WebSocket implementation (RFC 6455 compliant)**
+- ✅ **NEW: DTC Server running and operational**
+- ✅ **NEW: Exchange Factory with Coinbase/Binance support**
 
 ### What We're Building Next
-- ❌ DTC protocol message structures
-- ❌ Real-time WebSocket market data feeds
-- ❌ Coinbase → DTC message translation
-- ❌ DTC server implementation
+- 🔄 **IN PROGRESS: Real-time WebSocket market data integration**
+- ❌ DTC protocol message structures (partially implemented)
+- ❌ Coinbase → DTC message translation layer
+- ❌ Historical data caching and retrieval
+- ❌ SierraChart integration testing
 
 ### Introduce Yourself
 Write one sentence about who you are and what you want to do with the project (e.g., "I'm using this to feed Coinbase market data into Sierra Chart via DTC protocol").
