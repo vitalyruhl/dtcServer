@@ -37,7 +37,8 @@ enum ControlID
     ID_BTN_UNSUBSCRIBE = 1011,
     ID_BTN_CLEAR_CONSOLE = 1012,
     ID_EDIT_CONSOLE = 1013,
-    ID_STATUS_BAR = 1014
+    ID_STATUS_BAR = 1014,
+    ID_EDIT_ACCOUNT_INFO = 1015
 };
 
 class DTCTestClientGUI
@@ -74,6 +75,7 @@ private:
     // UI Helper functions
     void UpdateConsole(const std::string &message);
     void UpdateStatus(const std::string &status);
+    void UpdateAccountInfo(const std::string &info);
     void ClearConsole();
     std::string GetSelectedSymbol();
 
@@ -82,6 +84,8 @@ private:
     void ProcessIncomingData();
     void ProcessDTCMessages();
     void HandleDTCResponse(std::unique_ptr<open_dtc_server::core::dtc::DTCMessage> message);
+    void RequestAccountBalance();
+    void RequestAccountPositions();
 
     // Window and control handles
     HWND m_hwnd = nullptr;
@@ -96,6 +100,7 @@ private:
     HWND m_btnClearConsole = nullptr;
     HWND m_comboSymbols = nullptr;
     HWND m_editConsole = nullptr;
+    HWND m_editAccountInfo = nullptr;
     HWND m_statusBar = nullptr;
     HWND m_editServerHost = nullptr;
     HWND m_editServerPort = nullptr;
@@ -106,9 +111,7 @@ private:
     SOCKET m_socket = INVALID_SOCKET;
     std::string m_serverHost = "127.0.0.1";
     int m_serverPort = 11099;
-    std::vector<uint8_t> m_incomingBuffer;
-
-    // Window constants
+    std::vector<uint8_t> m_incomingBuffer; // Window constants
     static constexpr int WINDOW_WIDTH = 800;
     static constexpr int WINDOW_HEIGHT = 600;
     static constexpr int BUTTON_WIDTH = 120;

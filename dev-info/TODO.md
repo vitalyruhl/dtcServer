@@ -12,7 +12,30 @@
 - [x] **Live Market Data** - ✅ Real-time Coinbase WebSocket streaming (BTC ~$95,950)
 - [x] **Build System** - ✅ COMPLETE CMake with Visual Studio 2022, all targets building
 
-## 🚧 CURRENT STATUS - What Works vs What's Still Needed
+### Current Priority Tasks
+
+#### 🚧 NEXT - GUI Account Info Implementation (Tomorrow)
+- **Issue**: GUI client successfully connects and shows login success, but missing actual account data display
+- **Problem**: DTC protocol missing `AccountBalancesRequest`, `AccountBalanceUpdate` message types  
+- **Available**: Only `CURRENT_POSITIONS_REQUEST` (400) and `POSITION_UPDATE` (401) in protocol.hpp
+- **Solution Options**:
+  1. Use available `CurrentPositionsRequest` and adapt for account data
+  2. Add missing account balance message types to DTC protocol
+- **Goal**: Complete account info panel showing balance, positions, portfolio in GUI red box area
+
+#### 🚧 NEXT - DTC Protocol Account Messages  
+- **Need**: Add `AccountBalancesRequest`, `AccountBalanceUpdate` message types
+- **Reference**: Check DTC specification for complete account message set
+- **Status**: Protocol currently has limited account operations
+
+#### 🚧 NEXT - Test Account Info Workflow
+- **Flow**: Login → Request Balance → Request Positions → Display in Account Panel
+- **Verify**: [MOCKED DATA] labeling consistency and split-screen layout
+- **Current**: Login works, missing account data requests
+
+#### 🚧 FUTURE - Server-side Coinbase Integration
+- **Goal**: Replace mocked data with real Coinbase API calls in DTC server
+- **Priority**: After GUI account display is working
 
 ### ✅ WORKING (REAL):
 - **DTC Protocol**: Full bidirectional communication between client and server ✅
@@ -37,7 +60,39 @@
 
 ## 🎯 IMMEDIATE PRIORITIES
 
-### 1. **P0 - Fix Client-Server Data Bridge** 🚧
+### 1. **P0 - Comprehensive DTC Protocol Test Client** 🚧
+
+- check this:
+  [coinbase-dtc-core] [WARNING] SSL_read failed: error:00000000:lib(0)::reason(0)
+  [coinbase-dtc-core] [WARNING] SSL_read failed: error:00000000:lib(0)::reason(0)
+  [coinbase-dtc-core] [WARNING] SSL_read failed: error:00000000:lib(0)::reason(0)
+  [coinbase-dtc-core] [WARNING] SSL_read failed: error:00000000:lib(0)::reason(0)
+  [coinbase-dtc-core] [WARNING] SSL_read failed: error:00000000:lib(0)::reason(0)
+  [coinbase-dtc-core] [WARNING] SSL_read failed: error:00000000:lib(0)::reason(0)
+
+- [ ] Create complete test client that validates ALL DTC protocol functions
+- [ ] Test every DTC message type with real Coinbase data (not mock)
+- [ ] Verify protocol conformance for all implemented features
+- [ ] Account balance requests with real Coinbase account data
+- [ ] Symbol listing from actual Coinbase products API
+- [ ] Market data streaming validation with live data
+- [ ] Order book (DOM) data accuracy testing
+
+### 2. **P0 - GitHub Actions Test Automation** 🚧
+- [ ] Automated testing pipeline for all DTC protocol functions
+- [ ] Test matrix covering all supported DTC message types
+- [ ] Integration tests against real Coinbase API endpoints
+- [ ] Performance benchmarks for latency-critical operations
+- [ ] Failed tests must block merges to main branch
+- [ ] End-to-end validation: Coinbase API → DTC Server → DTC Client
+
+### 3. **P0 - Code Quality & Emoji Replacement** 🚧
+- [ ] Scan entire codebase for emoji characters
+- [ ] Replace ALL emojis with text equivalents: [SUCCESS], [ERROR], [WARNING], [INFO]
+- [ ] Zero tolerance policy for emojis in production code
+- [ ] Add automated emoji detection in CI/CD pipeline
+
+### 4. **P1 - Fix Client-Server Data Bridge** 
 - [ ] Debug why TCP connection exists but server doesn't log client accepts
 - [ ] Investigate DTC protocol message flow from server to connected clients
 - [ ] Fix client showing mock data ($45,250) vs server live data (~$95,950)

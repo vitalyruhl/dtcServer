@@ -237,9 +237,21 @@ void DTCTestClientGUI::OnCreate(HWND hwnd)
 
     y += 25;
 
+    // Split the area: Console on left, Account Info on right
+    int console_width = (WINDOW_WIDTH - 40) / 2 - 10;
+    int account_info_x = x + console_width + 20;
+
     m_editConsole = CreateWindowA("EDIT", "",
                                   WS_VISIBLE | WS_CHILD | WS_BORDER | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY,
-                                  x, y, WINDOW_WIDTH - 40, 200, hwnd, (HMENU)ID_EDIT_CONSOLE, m_hInstance, nullptr);
+                                  x, y, console_width, 200, hwnd, (HMENU)ID_EDIT_CONSOLE, m_hInstance, nullptr);
+
+    // Account Info Panel
+    CreateWindowA("STATIC", "Account Information:", WS_VISIBLE | WS_CHILD,
+                  account_info_x, y - 25, 150, 20, hwnd, nullptr, m_hInstance, nullptr);
+
+    m_editAccountInfo = CreateWindowA("EDIT", "Not connected\\r\\n\\r\\nConnect to server to see account information",
+                                      WS_VISIBLE | WS_CHILD | WS_BORDER | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY,
+                                      account_info_x, y, console_width, 200, hwnd, (HMENU)ID_EDIT_ACCOUNT_INFO, m_hInstance, nullptr);
 
     // Status bar
     m_statusBar = CreateWindowA("msctls_statusbar32", "Ready",
@@ -248,8 +260,10 @@ void DTCTestClientGUI::OnCreate(HWND hwnd)
 
     // Set initial status
     UpdateStatus("Ready - Not Connected");
+
     UpdateConsole("DTC Test Client initialized");
     UpdateConsole("Click 'Connect' to connect to DTC server");
+    UpdateConsole("Use 'Account Info' button after connecting to get account data from server");
 }
 
 void DTCTestClientGUI::OnCommand(HWND hwnd, WPARAM wParam)
@@ -355,6 +369,10 @@ void DTCTestClientGUI::ConnectToServer()
     m_isConnected = true;
     UpdateConsole("Connected successfully!");
     UpdateStatus("Connected to " + m_serverHost + ":" + std::to_string(m_serverPort));
+    UpdateAccountInfo("Connection Status: CONNECTED");
+    UpdateAccountInfo("Server: " + m_serverHost + ":" + std::to_string(m_serverPort));
+    UpdateAccountInfo("Protocol: DTC v8");
+    UpdateAccountInfo("Ready to receive account data...");
 
     // Start timer for processing incoming data (check every 100ms)
     SetTimer(m_hwnd, 1, 100, nullptr);
@@ -388,6 +406,8 @@ void DTCTestClientGUI::DisconnectFromServer()
 
     UpdateConsole("Disconnected from server");
     UpdateStatus("Disconnected");
+    UpdateAccountInfo("Connection Status: DISCONNECTED");
+    UpdateAccountInfo("Account data cleared");
 
     // Enable/disable buttons
     EnableWindow(m_btnConnect, TRUE);
@@ -405,14 +425,17 @@ void DTCTestClientGUI::GetAccountInfo()
     if (!m_isConnected)
     {
         UpdateConsole("ERROR: Not connected to server");
+        UpdateConsole("Please connect to DTC server first");
         return;
     }
 
-    UpdateConsole("Sending DTC LogonRequest to server...");
+    UpdateConsole("=== ACCOUNT INFO REQUEST ===");
+    UpdateConsole("Sending DTC LogonRequest to server (with account info request)...");
 
     try
     {
         // Create LogonRequest message using DTC protocol
+        // This will trigger the server to respond with account information
         open_dtc_server::core::dtc::LogonRequest logon_request;
         logon_request.protocol_version = open_dtc_server::core::dtc::DTC_PROTOCOL_VERSION;
         logon_request.username = "test_user";
@@ -429,11 +452,15 @@ void DTCTestClientGUI::GetAccountInfo()
         if (SendDTCMessage(message_data))
         {
             UpdateConsole("LogonRequest sent successfully");
-            UpdateConsole("Waiting for server response...");
+            UpdateConsole("Waiting for server response with account data...");
+            UpdateConsole("Server will provide real Coinbase account data via DTC protocol");
+            UpdateAccountInfo("Account Request: SENT");
+            UpdateAccountInfo("Waiting for Coinbase data...");
         }
         else
         {
             UpdateConsole("Failed to send LogonRequest");
+            UpdateAccountInfo("Account Request: FAILED");
         }
     }
     catch (const std::exception &e)
@@ -490,11 +517,11 @@ void DTCTestClientGUI::LoadAvailableSymbols()
     for (const auto &symbol : standardSymbols)
     {
         SendMessageA(m_comboSymbols, CB_ADDSTRING, 0, (LPARAM)symbol.c_str());
-        UpdateConsole("  Available: " + symbol + " (would come from server)");
+        UpdateConsole("  Available: " + symbol + " [MOCKED DATA]");
     }
 
     SendMessage(m_comboSymbols, CB_SETCURSEL, 0, 0);
-    UpdateConsole("Next: Server needs to implement symbol listing from Coinbase API");
+    UpdateConsole("[MOCKED DATA] Next: Server needs to implement symbol listing from Coinbase API");
 }
 
 void DTCTestClientGUI::GetSymbolInfo()
@@ -515,14 +542,14 @@ void DTCTestClientGUI::GetSymbolInfo()
     UpdateConsole("Getting symbol info for: " + symbol);
 
     // TODO: Implement actual DTC symbol info request
-    UpdateConsole("Symbol Info for " + symbol + ":");
-    UpdateConsole("  Full Name: " + symbol);
-    UpdateConsole("  Type: Cryptocurrency Pair");
-    UpdateConsole("  Base Currency: " + symbol.substr(0, symbol.find('-')));
-    UpdateConsole("  Quote Currency: " + symbol.substr(symbol.find('-') + 1));
-    UpdateConsole("  Min Order Size: 0.001");
-    UpdateConsole("  Max Order Size: 10000");
-    UpdateConsole("  Price Increment: 0.01");
+    UpdateConsole("[MOCKED DATA] Symbol Info for " + symbol + ":");
+    UpdateConsole("[MOCKED DATA]   Full Name: " + symbol);
+    UpdateConsole("[MOCKED DATA]   Type: Cryptocurrency Pair");
+    UpdateConsole("[MOCKED DATA]   Base Currency: " + symbol.substr(0, symbol.find('-')));
+    UpdateConsole("[MOCKED DATA]   Quote Currency: " + symbol.substr(symbol.find('-') + 1));
+    UpdateConsole("[MOCKED DATA]   Min Order Size: 0.001");
+    UpdateConsole("[MOCKED DATA]   Max Order Size: 10000");
+    UpdateConsole("[MOCKED DATA]   Price Increment: 0.01");
 }
 
 void DTCTestClientGUI::GetDOMData()
@@ -543,15 +570,15 @@ void DTCTestClientGUI::GetDOMData()
     UpdateConsole("Getting DOM (Depth of Market) data for: " + symbol);
 
     // TODO: Implement actual DTC DOM request
-    UpdateConsole("DOM Data for " + symbol + ":");
-    UpdateConsole("  Bids:");
-    UpdateConsole("    $45,250.00 x 0.5");
-    UpdateConsole("    $45,249.50 x 1.2");
-    UpdateConsole("    $45,249.00 x 0.8");
-    UpdateConsole("  Asks:");
-    UpdateConsole("    $45,251.00 x 0.7");
-    UpdateConsole("    $45,251.50 x 1.0");
-    UpdateConsole("    $45,252.00 x 0.9");
+    UpdateConsole("[MOCKED DATA] DOM Data for " + symbol + ":");
+    UpdateConsole("[MOCKED DATA]   Bids:");
+    UpdateConsole("[MOCKED DATA]     $45,250.00 x 0.5");
+    UpdateConsole("[MOCKED DATA]     $45,249.50 x 1.2");
+    UpdateConsole("[MOCKED DATA]     $45,249.00 x 0.8");
+    UpdateConsole("[MOCKED DATA]   Asks:");
+    UpdateConsole("[MOCKED DATA]     $45,251.00 x 0.7");
+    UpdateConsole("[MOCKED DATA]     $45,251.50 x 1.0");
+    UpdateConsole("[MOCKED DATA]     $45,252.00 x 0.9");
 }
 
 void DTCTestClientGUI::SubscribeToSymbol()
@@ -591,10 +618,80 @@ void DTCTestClientGUI::UnsubscribeFromSymbol()
         return;
     }
 
-    UpdateConsole("🔕 Unsubscribing from: " + symbol);
+    UpdateConsole("Unsubscribing from: " + symbol);
 
     // TODO: Implement actual DTC unsubscribe request
     UpdateConsole("Unsubscribed from " + symbol);
+}
+
+void DTCTestClientGUI::RequestAccountBalance()
+{
+    if (!m_isConnected)
+        return;
+
+    UpdateConsole("Requesting account balance from server...");
+
+    try
+    {
+        // Create AccountBalancesRequest message
+        open_dtc_server::core::dtc::AccountBalancesRequest balance_request;
+        balance_request.request_id = 2001;
+        balance_request.trade_account = ""; // Use default account
+
+        // Serialize the message
+        std::vector<uint8_t> message_data = balance_request.serialize();
+
+        // Send to server
+        if (SendDTCMessage(message_data))
+        {
+            UpdateConsole("AccountBalancesRequest sent successfully");
+            UpdateAccountInfo("Balance Request: SENT");
+        }
+        else
+        {
+            UpdateConsole("Failed to send AccountBalancesRequest");
+            UpdateAccountInfo("Balance Request: FAILED");
+        }
+    }
+    catch (const std::exception &e)
+    {
+        UpdateConsole("Error creating AccountBalancesRequest: " + std::string(e.what()));
+    }
+}
+
+void DTCTestClientGUI::RequestAccountPositions()
+{
+    if (!m_isConnected)
+        return;
+
+    UpdateConsole("Requesting account positions from server...");
+
+    try
+    {
+        // Create PositionsRequest message
+        open_dtc_server::core::dtc::PositionsRequest positions_request;
+        positions_request.request_id = 2002;
+        positions_request.trade_account = ""; // Use default account
+
+        // Serialize the message
+        std::vector<uint8_t> message_data = positions_request.serialize();
+
+        // Send to server
+        if (SendDTCMessage(message_data))
+        {
+            UpdateConsole("PositionsRequest sent successfully");
+            UpdateAccountInfo("Positions Request: SENT");
+        }
+        else
+        {
+            UpdateConsole("Failed to send PositionsRequest");
+            UpdateAccountInfo("Positions Request: FAILED");
+        }
+    }
+    catch (const std::exception &e)
+    {
+        UpdateConsole("Error creating PositionsRequest: " + std::string(e.what()));
+    }
 }
 
 void DTCTestClientGUI::UpdateConsole(const std::string &message)
@@ -627,6 +724,30 @@ void DTCTestClientGUI::UpdateStatus(const std::string &status)
     {
         SendMessageA(m_statusBar, SB_SETTEXTA, 0, (LPARAM)status.c_str());
     }
+}
+
+void DTCTestClientGUI::UpdateAccountInfo(const std::string &info)
+{
+    if (!m_editAccountInfo)
+        return;
+
+    // Get current time
+    auto now = std::chrono::system_clock::now();
+    auto time_t = std::chrono::system_clock::to_time_t(now);
+    std::stringstream ss;
+    ss << std::put_time(std::localtime(&time_t), "[%H:%M:%S] ");
+
+    std::string timestampedInfo = ss.str() + info + "\\r\\n";
+
+    // Get current text length
+    int textLength = GetWindowTextLengthA(m_editAccountInfo);
+
+    // Set selection to end and append text
+    SendMessage(m_editAccountInfo, EM_SETSEL, textLength, textLength);
+    SendMessageA(m_editAccountInfo, EM_REPLACESEL, FALSE, (LPARAM)timestampedInfo.c_str());
+
+    // Scroll to bottom
+    SendMessage(m_editAccountInfo, EM_SCROLLCARET, 0, 0);
 }
 
 void DTCTestClientGUI::ClearConsole()
@@ -697,7 +818,7 @@ void DTCTestClientGUI::ProcessIncomingData()
         else if (bytes_received == 0)
         {
             // Server disconnected
-            UpdateConsole("🔌 Server disconnected");
+            UpdateConsole("[INFO] Server disconnected");
             DisconnectFromServer();
         }
         else if (bytes_received == SOCKET_ERROR)
@@ -773,17 +894,30 @@ void DTCTestClientGUI::HandleDTCResponse(std::unique_ptr<open_dtc_server::core::
 
         if (logon_resp->result == 1) // Success
         {
-            UpdateConsole("DTC Login successful! (REAL protocol communication)");
-            UpdateConsole("Server: " + logon_resp->server_name + " (REAL server instance)");
-            UpdateConsole("Trading supported: " + std::string(logon_resp->trading_is_supported ? "Yes" : "No") + " [SERVER CONFIG]");
-            UpdateConsole("Market data supported: " + std::string(logon_resp->market_depth_is_supported ? "Yes" : "No") + " [SERVER CONFIG]");
-            UpdateConsole("Security definitions supported: " + std::string(logon_resp->security_definitions_supported ? "Yes" : "No") + " [SERVER CONFIG]");
+            UpdateConsole("DTC Login successful!");
+            UpdateConsole("Server: " + logon_resp->server_name);
+            UpdateConsole("Trading supported: " + std::string(logon_resp->trading_is_supported ? "Yes" : "No"));
+            UpdateConsole("Market data supported: " + std::string(logon_resp->market_depth_is_supported ? "Yes" : "No"));
+            UpdateConsole("Security definitions supported: " + std::string(logon_resp->security_definitions_supported ? "Yes" : "No"));
             UpdateConsole("Exchange connection: Will be verified via live data streaming");
             UpdateConsole("Status: DTC protocol OK | Ready for market data requests");
+
+            // Update Account Info Panel
+            UpdateAccountInfo("=== DTC LOGIN SUCCESS ===");
+            UpdateAccountInfo("Server: " + logon_resp->server_name);
+            UpdateAccountInfo("Trading: " + std::string(logon_resp->trading_is_supported ? "Supported" : "Not Supported"));
+            UpdateAccountInfo("Market Data: " + std::string(logon_resp->market_depth_is_supported ? "Supported" : "Not Supported"));
+            UpdateAccountInfo("Status: Ready for requests");
+
+            // Request account balance and positions after successful login
+            RequestAccountBalance();
+            RequestAccountPositions();
         }
         else
         {
             UpdateConsole("Login failed: " + logon_resp->result_text);
+            UpdateAccountInfo("Login Status: FAILED");
+            UpdateAccountInfo("Error: " + logon_resp->result_text);
         }
         break;
     }
@@ -791,10 +925,10 @@ void DTCTestClientGUI::HandleDTCResponse(std::unique_ptr<open_dtc_server::core::
     case open_dtc_server::core::dtc::MessageType::SECURITY_DEFINITION_RESPONSE:
     {
         auto *symbol_resp = static_cast<open_dtc_server::core::dtc::SecurityDefinitionResponse *>(message.get());
-        UpdateConsole("Symbol: " + symbol_resp->symbol + " (" + symbol_resp->exchange + ") [CONFIGURED - not live data yet]");
-        UpdateConsole("   Description: " + symbol_resp->description + " [SERVER CONFIG]");
-        UpdateConsole("   Min tick: " + std::to_string(symbol_resp->min_price_increment) + " [DEFAULT VALUE]");
-        UpdateConsole("⚠️  Note: Symbol list is server-configured, not from live Coinbase API");
+        UpdateConsole("[MOCKED DATA] Symbol: " + symbol_resp->symbol + " (" + symbol_resp->exchange + ")");
+        UpdateConsole("[MOCKED DATA]    Description: " + symbol_resp->description);
+        UpdateConsole("[MOCKED DATA]    Min tick: " + std::to_string(symbol_resp->min_price_increment));
+        UpdateConsole("[MOCKED DATA] Symbol list is server-configured, not from live Coinbase API");
 
         // Add to combo box if not already there
         std::string symbol_text = symbol_resp->symbol;
@@ -817,6 +951,43 @@ void DTCTestClientGUI::HandleDTCResponse(std::unique_ptr<open_dtc_server::core::
         break;
     }
 
+    case open_dtc_server::core::dtc::MessageType::ACCOUNT_BALANCE_UPDATE:
+    {
+        auto *balance_resp = static_cast<open_dtc_server::core::dtc::AccountBalanceUpdate *>(message.get());
+
+        UpdateConsole("Account Balance Update received:");
+        UpdateConsole("  Currency: " + balance_resp->currency);
+        UpdateConsole("  Cash Balance: $" + std::to_string(balance_resp->cash_balance));
+        UpdateConsole("  Balance Available: $" + std::to_string(balance_resp->balance_available_for_new_positions));
+
+        // Update Account Info Panel with balance data
+        UpdateAccountInfo("=== ACCOUNT BALANCE ===");
+        UpdateAccountInfo("Currency: " + balance_resp->currency);
+        UpdateAccountInfo("Cash Balance: $" + std::to_string(balance_resp->cash_balance));
+        UpdateAccountInfo("Available: $" + std::to_string(balance_resp->balance_available_for_new_positions));
+        UpdateAccountInfo("Account: " + balance_resp->trade_account);
+        break;
+    }
+
+    case open_dtc_server::core::dtc::MessageType::POSITION_UPDATE:
+    {
+        auto *position_resp = static_cast<open_dtc_server::core::dtc::PositionUpdate *>(message.get());
+
+        UpdateConsole("Position Update received:");
+        UpdateConsole("  Symbol: " + position_resp->symbol);
+        UpdateConsole("  Quantity: " + std::to_string(position_resp->quantity));
+        UpdateConsole("  Avg Price: $" + std::to_string(position_resp->average_price));
+        UpdateConsole("  Unrealized P&L: $" + std::to_string(position_resp->unrealized_profit_loss));
+
+        // Update Account Info Panel with position data
+        UpdateAccountInfo("=== POSITION: " + position_resp->symbol + " ===");
+        UpdateAccountInfo("Quantity: " + std::to_string(position_resp->quantity));
+        UpdateAccountInfo("Avg Price: $" + std::to_string(position_resp->average_price));
+        UpdateAccountInfo("P&L: $" + std::to_string(position_resp->unrealized_profit_loss));
+        UpdateAccountInfo("Account: " + position_resp->trade_account);
+        break;
+    }
+
     case open_dtc_server::core::dtc::MessageType::HEARTBEAT:
     {
         // Echo heartbeat back to server
@@ -829,7 +1000,7 @@ void DTCTestClientGUI::HandleDTCResponse(std::unique_ptr<open_dtc_server::core::
     }
 
     default:
-        UpdateConsole("📨 Received DTC message type: " +
+        UpdateConsole("[INFO] Received DTC message type: " +
                       std::to_string(static_cast<uint16_t>(message->get_type())));
         break;
     }

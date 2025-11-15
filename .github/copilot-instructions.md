@@ -39,6 +39,8 @@
  * - Comprehensive error handling
  * - Thread-safe implementations for concurrent operations
  * - Detailed logging for debugging (English messages only)
+ * - IMMEDIATE EMOJI REPLACEMENT: If ANY emoji is detected in code, comments, or log messages, replace it immediately with plain text equivalent like [SUCCESS], [ERROR], [WARNING], [INFO]
+ * - Zero tolerance for emojis in production code - they cause encoding and compatibility issues
  * 
  * Architecture Patterns:
  * - Factory pattern for exchange implementations
@@ -51,6 +53,10 @@
  * - Integration tests for exchange connectivity
  * - Mock implementations for testing
  * - PowerShell scripts for CI/CD automation
+ * - Comprehensive DTC Test Client: Create a complete test client that validates ALL DTC protocol functions with real data
+ * - All DTC protocol functions must be strictly conformant to protocol specifications
+ * - Every DTC feature must have automated testing coverage in GitHub Actions
+ * - Real data validation: Test client should verify actual Coinbase data integration, not mock data
  * 
  * Performance Priorities:
  * - Low-latency market data processing
@@ -82,7 +88,17 @@
  * - Mark tasks as ✅ COMPLETED when done, 🚧 CURRENT when working on them
  * - Add new priorities and features as they emerge during development
  * - Reference TODO.md to understand current priorities and completed work
- * - Mock/Demo Data Policy: All simulated data MUST be clearly labeled with [MOCK] prefix
- * - Never present fake data as real without explicit warning to user
- * - use emojis appropriately to indicate status: ✅ for done, 🚧 for in-progress, ⚠️ for warnings, but not in code
+ * Mock/Demo Data Policy: All simulated data MUST be clearly labeled with [MOCKED DATA] prefix
+ * [MOCKED DATA] labels must be placed at the BEGINNING of log messages, not at the end
+ * Never present fake data as real without explicit warning to user
+ * Rule: Always prefix simulated/demo content with "[MOCKED DATA]" at the start of the message
+ * Use emojis appropriately to indicate status: ✅ for done, 🚧 for in-progress, ⚠️ for warnings, but not in code
+ * 
+ * GitHub Actions & Continuous Integration:
+ * - ALL DTC protocol functions must have automated test coverage
+ * - Tests must run against real Coinbase data (not mock data) where possible
+ * - Failed tests should block merges to main branch
+ * - Test matrix should cover all supported DTC message types
+ * - Integration tests must validate end-to-end data flow from Coinbase API through DTC protocol to client
+ * - Performance benchmarks for latency-critical operations
  */

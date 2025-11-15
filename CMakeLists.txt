@@ -190,14 +190,18 @@ endif()
 if(nlohmann_json_FOUND)
     target_link_libraries(coinbase_feed PUBLIC nlohmann_json::nlohmann_json)
     target_link_libraries(binance_feed PUBLIC nlohmann_json::nlohmann_json)
+    target_link_libraries(dtc_auth PUBLIC nlohmann_json::nlohmann_json)
     target_compile_definitions(coinbase_feed PUBLIC HAS_NLOHMANN_JSON)
     target_compile_definitions(binance_feed PUBLIC HAS_NLOHMANN_JSON)
+    target_compile_definitions(dtc_auth PUBLIC HAS_NLOHMANN_JSON)
     message(STATUS "✅ Using nlohmann_json for JSON parsing")
 endif()
 
 if(jwt-cpp_FOUND)
     target_link_libraries(coinbase_feed PUBLIC jwt-cpp::jwt-cpp)
+    target_link_libraries(dtc_auth PUBLIC jwt-cpp::jwt-cpp)
     target_compile_definitions(coinbase_feed PUBLIC HAS_JWT_CPP)
+    target_compile_definitions(dtc_auth PUBLIC HAS_JWT_CPP)
     message(STATUS "✅ Using jwt-cpp for JWT authentication")
 endif()
 
@@ -293,6 +297,44 @@ if (BUILD_TESTING AND ENABLE_TESTING)
     #     ${CMAKE_CURRENT_SOURCE_DIR}/include
     #     ${CMAKE_CURRENT_SOURCE_DIR}/settings
     # )
+    
+    # Real Coinbase Account Info Test
+    add_executable(test_coinbase_account_info
+        src/tests/test_coinbase_account_info.cpp
+        src/exchanges/coinbase/rest_client.cpp
+    )
+    target_link_libraries(test_coinbase_account_info
+        dtc_auth
+        dtc_util
+    )
+    if(CURL_FOUND)
+        target_link_libraries(test_coinbase_account_info ${CURL_LIBRARIES})
+        target_include_directories(test_coinbase_account_info PRIVATE ${CURL_INCLUDE_DIRS})
+    endif()
+    if(nlohmann_json_FOUND)
+        target_link_libraries(test_coinbase_account_info nlohmann_json::nlohmann_json)
+    endif()
+    target_include_directories(test_coinbase_account_info PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
+    # Coinbase Endpoint Diagnostic Test
+    add_executable(test_coinbase_endpoints
+        src/tests/test_coinbase_endpoints.cpp
+    )
+    target_link_libraries(test_coinbase_endpoints
+        dtc_auth
+        dtc_util
+    )
+    if(CURL_FOUND)
+        target_link_libraries(test_coinbase_endpoints ${CURL_LIBRARIES})
+        target_include_directories(test_coinbase_endpoints PRIVATE ${CURL_INCLUDE_DIRS})
+    endif()
+    target_include_directories(test_coinbase_endpoints PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
     
     # TEMPORARY: Disabled due to missing header files
     # add_executable(test_advanced_trade_api
