@@ -23,6 +23,7 @@ namespace open_dtc_server
         namespace coinbase
         {
             class WebSocketClient;
+            class SSLWebSocketClient; // NEW: SSL WebSocket client
         }
     }
 }
@@ -126,6 +127,7 @@ namespace open_dtc_server
                 // WebSocket callbacks
                 void on_trade_received(const exchanges::base::MarketTrade &trade);
                 void on_level2_received(const exchanges::base::MarketLevel2 &level2);
+                void on_websocket_message_received(const std::string &message); // NEW: Raw SSL WebSocket message handler
 
                 // Symbol mapping initialization
                 void initialize_symbol_mappings();
@@ -183,7 +185,8 @@ namespace open_dtc_server
                 std::unique_ptr<http::IHttpClient> http_client_;
 
                 // WebSocket client for real-time data
-                std::unique_ptr<feed::coinbase::WebSocketClient> websocket_client_; // Re-enabled
+                std::unique_ptr<feed::coinbase::WebSocketClient> websocket_client_;        // Plain WebSocket (public data)
+                std::unique_ptr<feed::coinbase::SSLWebSocketClient> ssl_websocket_client_; // NEW: SSL WebSocket (authenticated)
 
                 // Authentication
                 std::unique_ptr<auth::JWTAuthenticator> authenticator_;

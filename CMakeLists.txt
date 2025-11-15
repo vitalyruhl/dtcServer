@@ -84,6 +84,7 @@ add_library(exchange_factory STATIC
 add_library(coinbase_feed STATIC
     src/exchanges/coinbase/coinbase_feed.cpp
     src/exchanges/coinbase/websocket_client.cpp  # Re-enabled with working implementation
+    src/exchanges/coinbase/ssl_websocket_client.cpp  # New SSL/TLS WebSocket client with JWT
 )
 
 # Create Binance feed library
@@ -493,6 +494,17 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_ssl_websocket.cpp")
     endif()
 endif()
 
+# SSL WebSocket Coinbase specific test
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/exchanges/test_ssl_websocket_coinbase.cpp")
+    add_executable(test_ssl_websocket_coinbase tests/exchanges/test_ssl_websocket_coinbase.cpp)
+    target_link_libraries(test_ssl_websocket_coinbase coinbase_feed exchange_base dtc_util)
+    target_include_directories(test_ssl_websocket_coinbase PRIVATE include)
+    
+    if(WIN32)
+        target_link_libraries(test_ssl_websocket_coinbase ws2_32 crypt32 secur32)
+    endif()
+endif()
+
 # Basic WebSocket test executable
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_basic.cpp")
     add_executable(test_websocket_basic tests/test_websocket_basic.cpp)
@@ -551,8 +563,8 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/dtc_test_client/main_gui.cpp")
     message(STATUS "✅ DTC Test Client Windows GUI will be built")
 endif()
 
-# DTC Test Client - Console application for testing DTC server (legacy)
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/dtc_test_client/main.cpp")
+# DTC Test Client - Console application for testing DTC server (legacy) - TEMPORARILY DISABLED
+if(FALSE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/dtc_test_client/main.cpp")
     add_executable(dtc_test_client_console
         src/dtc_test_client/main.cpp
         src/dtc_test_client/test_client.cpp

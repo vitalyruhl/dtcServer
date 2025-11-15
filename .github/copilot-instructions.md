@@ -9,6 +9,8 @@
  * - All error messages in English
  * - Give only brief overview after completing tasks
  * - Provide detailed explanations only when explicitly asked
+ * - NEVER use emojis in code, comments, log messages, or outputs
+ * - Use plain text symbols like [SUCCESS], [ERROR], [WARNING] instead of emojis
  * 
  * Project Vision & Roadmap:
  * - PRIMARY FOCUS: Coinbase integration first (other exchanges later)

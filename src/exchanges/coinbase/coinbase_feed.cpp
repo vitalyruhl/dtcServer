@@ -1,6 +1,8 @@
 #include "coinbase_dtc_core/exchanges/coinbase/coinbase_feed.hpp"
-#include "coinbase_dtc_core/exchanges/coinbase/websocket_client.hpp" // Re-enabled
+#include "coinbase_dtc_core/exchanges/coinbase/websocket_client.hpp"     // Re-enabled
+#include "coinbase_dtc_core/exchanges/coinbase/ssl_websocket_client.hpp" // NEW: SSL WebSocket client
 #include "coinbase_dtc_core/core/util/log.hpp"
+#include <nlohmann/json.hpp> // For JSON parsing
 #include <chrono>
 #include <sstream>
 #include <iomanip>
@@ -35,24 +37,58 @@ namespace open_dtc_server
 
                 try
                 {
-                    util::log("[COINBASE] Connecting to WebSocket: " + config_.websocket_url);
+                    util::log("[COINBASE] Connecting to Secure WebSocket: " + config_.websocket_url);
 
-                    // Use real WebSocket connection with our WebSocketClient
-                    websocket_client_ = std::make_unique<feed::coinbase::WebSocketClient>();
+                    // Choose between SSL WebSocket (for authenticated feeds) or plain WebSocket
+                    bool use_ssl = config_.websocket_url.find("wss://") == 0 || config_.websocket_url.find("443") != std::string::npos;
 
-                    // Set up callbacks
-                    websocket_client_->set_trade_callback([this](const exchanges::base::MarketTrade &trade)
-                                                          { this->on_trade_received(trade); });
-
-                    websocket_client_->set_level2_callback([this](const exchanges::base::MarketLevel2 &level2)
-                                                           { this->on_level2_received(level2); });
-
-                    // Connect to WebSocket
-                    bool ws_connected = websocket_client_->connect("ws-feed.exchange.coinbase.com", 443);
-                    if (!ws_connected)
+                    if (use_ssl)
                     {
-                        util::log("[ERROR] Failed to establish WebSocket connection to Coinbase");
-                        return false;
+                        util::log("[COINBASE] Using SSL WebSocket client with JWT authentication");
+                        ssl_websocket_client_ = std::make_unique<feed::coinbase::SSLWebSocketClient>();
+
+                        // Set up callbacks for SSL client
+                        ssl_websocket_client_->set_message_callback([this](const std::string &message)
+                                                                    { this->on_websocket_message_received(message); });
+
+                        ssl_websocket_client_->set_connection_callback([this](bool connected)
+                                                                       {
+                            if (connected) {
+                                this->notify_connection(true);
+                                // Authenticate and subscribe after connection
+                                ssl_websocket_client_->authenticate_with_jwt();
+                            } else {
+                                this->notify_connection(false);
+                            } });
+
+                        // Connect to SSL WebSocket (Coinbase Advanced Trade)
+                        bool ws_connected = ssl_websocket_client_->connect("ws-feed.exchange.coinbase.com", 443);
+                        if (!ws_connected)
+                        {
+                            util::log("[ERROR] Failed to establish SSL WebSocket connection to Coinbase");
+                            return false;
+                        }
+                    }
+                    else
+                    {
+                        util::log("[COINBASE] Using plain WebSocket client (public data only)");
+                        // Use plain WebSocket connection with our WebSocketClient
+                        websocket_client_ = std::make_unique<feed::coinbase::WebSocketClient>();
+
+                        // Set up callbacks
+                        websocket_client_->set_trade_callback([this](const exchanges::base::MarketTrade &trade)
+                                                              { this->on_trade_received(trade); });
+
+                        websocket_client_->set_level2_callback([this](const exchanges::base::MarketLevel2 &level2)
+                                                               { this->on_level2_received(level2); });
+
+                        // Connect to plain WebSocket
+                        bool ws_connected = websocket_client_->connect("ws-feed.exchange.coinbase.com", 80);
+                        if (!ws_connected)
+                        {
+                            util::log("[ERROR] Failed to establish WebSocket connection to Coinbase");
+                            return false;
+                        }
                     }
 
                     connected_.store(true);
@@ -77,7 +113,14 @@ namespace open_dtc_server
 
                 util::log("[COINBASE] Disconnecting...");
 
-                // Disconnect WebSocket client
+                // Disconnect SSL WebSocket client
+                if (ssl_websocket_client_)
+                {
+                    ssl_websocket_client_->disconnect();
+                    ssl_websocket_client_.reset();
+                }
+
+                // Disconnect plain WebSocket client
                 if (websocket_client_)
                 {
                     websocket_client_->disconnect();
@@ -259,6 +302,196 @@ namespace open_dtc_server
 
                 // Forward to base class for distribution to clients
                 notify_level2(level2);
+            }
+
+            void CoinbaseFeed::on_websocket_message_received(const std::string &message)
+            {
+                // Process raw WebSocket message from SSL client
+                util::log("[COINBASE] SSL WebSocket message received: " + message.substr(0, 100) + "...");
+
+                try
+                {
+                    // Parse JSON message
+                    nlohmann::json json_message = nlohmann::json::parse(message);
+
+                    if (json_message.contains("type"))
+                    {
+                        std::string message_type = json_message["type"];
+
+                        if (message_type == "ticker")
+                        {
+                            // Handle ticker message
+                            handle_ticker_message(message);
+                        }
+                        else if (message_type == "match")
+                        {
+                            // Handle trade message
+                            handle_trade_message(message);
+                        }
+                        else if (message_type == "l2update")
+                        {
+                            // Handle level2 update
+                            handle_level2_message(message);
+                        }
+                        else if (message_type == "heartbeat")
+                        {
+                            // Handle heartbeat
+                            handle_heartbeat_message(message);
+                        }
+                        else if (message_type == "error")
+                        {
+                            // Handle error
+                            handle_error_message(message);
+                        }
+                        else
+                        {
+                            util::log("[COINBASE] Unknown message type: " + message_type);
+                        }
+                    }
+                }
+                catch (const std::exception &e)
+                {
+                    util::log("[ERROR] Failed to parse SSL WebSocket message: " + std::string(e.what()));
+                }
+            }
+
+            void CoinbaseFeed::handle_trade_message(const std::string &message)
+            {
+                try
+                {
+                    nlohmann::json json = nlohmann::json::parse(message);
+
+                    if (json.contains("product_id") && json.contains("price") && json.contains("size"))
+                    {
+                        std::string product_id = json["product_id"];
+                        double price = std::stod(json["price"].get<std::string>());
+                        double size = std::stod(json["size"].get<std::string>());
+
+                        // Convert to DTC format
+                        exchanges::base::MarketTrade trade;
+                        trade.symbol = product_id;
+                        trade.price = price;
+                        trade.volume = size;
+                        trade.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                              std::chrono::system_clock::now().time_since_epoch())
+                                              .count();
+
+                        // Forward to base class
+                        on_trade_received(trade);
+                    }
+                }
+                catch (const std::exception &e)
+                {
+                    util::log("[ERROR] Failed to parse trade message: " + std::string(e.what()));
+                }
+            }
+
+            void CoinbaseFeed::handle_level2_message(const std::string &message)
+            {
+                try
+                {
+                    nlohmann::json json = nlohmann::json::parse(message);
+
+                    if (json.contains("product_id") && json.contains("changes"))
+                    {
+                        std::string product_id = json["product_id"];
+                        auto changes = json["changes"];
+
+                        for (const auto &change : changes)
+                        {
+                            if (change.size() >= 3)
+                            {
+                                std::string side = change[0]; // "buy" or "sell"
+                                double price = std::stod(change[1].get<std::string>());
+                                double size = std::stod(change[2].get<std::string>());
+
+                                // Convert to DTC format
+                                exchanges::base::MarketLevel2 level2;
+                                level2.symbol = product_id;
+
+                                if (side == "buy")
+                                {
+                                    level2.bid_price = price;
+                                    level2.bid_size = size;
+                                    level2.ask_price = 0.0;
+                                    level2.ask_size = 0.0;
+                                }
+                                else
+                                {
+                                    level2.bid_price = 0.0;
+                                    level2.bid_size = 0.0;
+                                    level2.ask_price = price;
+                                    level2.ask_size = size;
+                                }
+
+                                level2.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                       std::chrono::system_clock::now().time_since_epoch())
+                                                       .count();
+
+                                // Forward to base class
+                                on_level2_received(level2);
+                            }
+                        }
+                    }
+                }
+                catch (const std::exception &e)
+                {
+                    util::log("[ERROR] Failed to parse level2 message: " + std::string(e.what()));
+                }
+            }
+
+            void CoinbaseFeed::handle_ticker_message(const std::string &message)
+            {
+                try
+                {
+                    nlohmann::json json = nlohmann::json::parse(message);
+
+                    if (json.contains("product_id") && json.contains("price"))
+                    {
+                        std::string product_id = json["product_id"];
+                        double price = std::stod(json["price"].get<std::string>());
+
+                        util::log("[COINBASE] Ticker update: " + product_id + " = $" + std::to_string(price));
+
+                        // Could convert to trade or level2 format for DTC
+                        // For now just log
+                    }
+                }
+                catch (const std::exception &e)
+                {
+                    util::log("[ERROR] Failed to parse ticker message: " + std::string(e.what()));
+                }
+            }
+
+            void CoinbaseFeed::handle_heartbeat_message(const std::string &message)
+            {
+                util::log("[COINBASE] Heartbeat received - connection alive");
+
+                // Update heartbeat timestamp for connection monitoring
+                // Could be used for reconnection logic
+            }
+
+            void CoinbaseFeed::handle_error_message(const std::string &message)
+            {
+                try
+                {
+                    nlohmann::json json = nlohmann::json::parse(message);
+
+                    std::string error_msg = "Coinbase WebSocket Error";
+                    if (json.contains("message"))
+                    {
+                        error_msg = json["message"];
+                    }
+
+                    util::log("[ERROR] Coinbase WebSocket: " + error_msg);
+
+                    // Forward error to base class
+                    notify_error(error_msg);
+                }
+                catch (const std::exception &e)
+                {
+                    util::log("[ERROR] Failed to parse error message: " + std::string(e.what()));
+                }
             }
 
         } // namespace coinbase
