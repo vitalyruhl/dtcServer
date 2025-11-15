@@ -15,6 +15,18 @@
 #include <chrono>
 #include <memory>
 
+// Forward declaration to avoid circular includes
+namespace open_dtc_server
+{
+    namespace feed
+    {
+        namespace coinbase
+        {
+            class WebSocketClient;
+        }
+    }
+}
+
 namespace open_dtc_server
 {
     namespace exchanges
@@ -111,6 +123,10 @@ namespace open_dtc_server
                 void handle_heartbeat_message(const std::string &message);
                 void handle_error_message(const std::string &message);
 
+                // WebSocket callbacks
+                void on_trade_received(const exchanges::base::MarketTrade &trade);
+                void on_level2_received(const exchanges::base::MarketLevel2 &level2);
+
                 // Symbol mapping initialization
                 void initialize_symbol_mappings();
                 bool fetch_product_list();
@@ -165,6 +181,9 @@ namespace open_dtc_server
 
                 // HTTP client for REST API calls
                 std::unique_ptr<http::IHttpClient> http_client_;
+
+                // WebSocket client for real-time data
+                std::unique_ptr<feed::coinbase::WebSocketClient> websocket_client_; // Re-enabled
 
                 // Authentication
                 std::unique_ptr<auth::JWTAuthenticator> authenticator_;
@@ -278,6 +297,16 @@ namespace open_dtc_server
                 /** Create unsubscription message JSON */
                 std::string create_unsubscription_json(const std::vector<std::string> &channels,
                                                        const std::vector<std::string> &product_ids);
+
+                // ========================================================================
+                // WEBSOCKET CALLBACK METHODS
+                // ========================================================================
+
+                /** Handle received trade data from WebSocket */
+                void on_trade_received(const base::MarketTrade &trade);
+
+                /** Handle received level2 data from WebSocket */
+                void on_level2_received(const base::MarketLevel2 &level2);
 
                 /** Validate Coinbase product ID format */
                 bool is_valid_product_id(const std::string &product_id);

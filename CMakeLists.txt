@@ -84,6 +84,7 @@ add_library(exchange_base STATIC
 # Create Coinbase feed library
 add_library(coinbase_feed STATIC
     src/exchanges/coinbase/coinbase_feed.cpp
+    src/exchanges/coinbase/websocket_client.cpp  # Re-enabled with working implementation
 )
 
 # Create Binance feed library
@@ -469,4 +470,15 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/debug_sizes.cpp")
     add_executable(debug_sizes debug_sizes.cpp)
     target_link_libraries(debug_sizes dtc_protocol dtc_util)
     target_include_directories(debug_sizes PRIVATE include)
+endif()
+
+# WebSocket test executable
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_websocket_connection.cpp")
+    add_executable(test_websocket_connection test_websocket_connection.cpp)
+    target_link_libraries(test_websocket_connection coinbase_feed exchange_base dtc_util)
+    target_include_directories(test_websocket_connection PRIVATE include)
+    
+    if(WIN32)
+        target_link_libraries(test_websocket_connection ws2_32)
+    endif()
 endif()

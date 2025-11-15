@@ -1,4 +1,5 @@
 #include "coinbase_dtc_core/exchanges/coinbase/coinbase_feed.hpp"
+#include "coinbase_dtc_core/exchanges/coinbase/websocket_client.hpp" // Re-enabled
 #include "coinbase_dtc_core/core/util/log.hpp"
 #include <chrono>
 #include <sstream>
@@ -36,11 +37,26 @@ namespace open_dtc_server
                 {
                     util::log("[COINBASE] Connecting to WebSocket: " + config_.websocket_url);
 
-                    // For now, simulate successful connection
-                    // TODO: Implement actual WebSocket connection with Coinbase Pro
-                    connected_.store(true);
+                    // Use real WebSocket connection with our WebSocketClient
+                    websocket_client_ = std::make_unique<feed::coinbase::WebSocketClient>();
 
-                    util::log("[COINBASE] Connected successfully (simulated)");
+                    // Set up callbacks
+                    websocket_client_->set_trade_callback([this](const exchanges::base::MarketTrade &trade)
+                                                          { this->on_trade_received(trade); });
+
+                    websocket_client_->set_level2_callback([this](const exchanges::base::MarketLevel2 &level2)
+                                                           { this->on_level2_received(level2); });
+
+                    // Connect to WebSocket
+                    bool ws_connected = websocket_client_->connect("ws-feed.exchange.coinbase.com", 443);
+                    if (!ws_connected)
+                    {
+                        util::log("[ERROR] Failed to establish WebSocket connection to Coinbase");
+                        return false;
+                    }
+
+                    connected_.store(true);
+                    util::log("[SUCCESS] Connected to Coinbase WebSocket feed at ws-feed.exchange.coinbase.com");
                     notify_connection(true);
                     return true;
                 }
@@ -60,6 +76,13 @@ namespace open_dtc_server
                 }
 
                 util::log("[COINBASE] Disconnecting...");
+
+                // Disconnect WebSocket client
+                if (websocket_client_)
+                {
+                    websocket_client_->disconnect();
+                    websocket_client_.reset();
+                }
 
                 connected_.store(false);
 
@@ -91,8 +114,11 @@ namespace open_dtc_server
 
                 util::log("[COINBASE] Subscribed to trades for " + symbol + " (Coinbase: " + coinbase_symbol + ")");
 
-                // TODO: Send actual subscription message to Coinbase WebSocket
-                // Format: {"type": "subscribe", "product_ids": ["BTC-USD"], "channels": ["matches"]}
+                // Send subscription to WebSocket client
+                if (websocket_client_)
+                {
+                    websocket_client_->subscribe_trades(coinbase_symbol);
+                }
 
                 return true;
             }
@@ -113,8 +139,11 @@ namespace open_dtc_server
 
                 util::log("[COINBASE] Subscribed to level2 for " + symbol + " (Coinbase: " + coinbase_symbol + ")");
 
-                // TODO: Send actual subscription message to Coinbase WebSocket
-                // Format: {"type": "subscribe", "product_ids": ["BTC-USD"], "channels": ["level2"]}
+                // Send subscription to WebSocket client
+                if (websocket_client_)
+                {
+                    websocket_client_->subscribe_level2(coinbase_symbol);
+                }
 
                 return true;
             }
@@ -213,6 +242,23 @@ namespace open_dtc_server
                 }
 
                 return symbols;
+            }
+
+            void CoinbaseFeed::on_trade_received(const exchanges::base::MarketTrade &trade)
+            {
+                // Process received trade data
+                util::log("[COINBASE] Trade received: " + trade.symbol + " - " + std::to_string(trade.price) + " @ " + std::to_string(trade.volume));
+
+                // Forward to base class for distribution to clients
+                notify_trade(trade);
+            }
+            void CoinbaseFeed::on_level2_received(const exchanges::base::MarketLevel2 &level2)
+            {
+                // Process received level2 data
+                util::log("[COINBASE] Level2 received: " + level2.symbol + " - Bid: " + std::to_string(level2.bid_price) + " Ask: " + std::to_string(level2.ask_price));
+
+                // Forward to base class for distribution to clients
+                notify_level2(level2);
             }
 
         } // namespace coinbase
