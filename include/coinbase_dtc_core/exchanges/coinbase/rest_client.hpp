@@ -26,6 +26,30 @@ namespace open_dtc_server
                 std::string name;          // Display name
             };
 
+            // Product type enumeration
+            enum class ProductType
+            {
+                ALL,
+                SPOT,   // Regular spot trading pairs (BTC-USD, ETH-USD, etc.)
+                FUTURE, // Futures contracts
+                UNKNOWN // Unknown or other product types
+            };
+
+            // Product information structure
+            struct Product
+            {
+                std::string product_id;         // e.g., "BTC-USD", "ETH-USD"
+                std::string display_name;       // Display name
+                std::string base_currency;      // Base currency (BTC, ETH, etc.)
+                std::string quote_currency;     // Quote currency (USD, EUR, etc.)
+                ProductType product_type;       // SPOT, FUTURE, etc.
+                bool trading_disabled = false;  // Trading enabled/disabled
+                std::string status;             // online, offline, etc.
+                double price_increment = 0.01;  // Minimum price increment
+                double base_min_size = 0.001;   // Minimum order size
+                double base_max_size = 10000.0; // Maximum order size
+            };
+
             // Complete portfolio structure
             struct Portfolio
             {
@@ -57,6 +81,11 @@ namespace open_dtc_server
                 // Account summary with all balances
                 bool get_portfolio_summary(Portfolio &summary);
 
+                // Market Data
+                bool get_products(std::vector<std::string> &symbols);
+                bool get_products_filtered(std::vector<Product> &products, ProductType type = ProductType::ALL);
+                bool get_product_types(std::vector<ProductType> &types);
+
                 // Configuration
                 void set_sandbox_mode(bool sandbox);
                 void set_timeout(int timeout_seconds);
@@ -82,6 +111,12 @@ namespace open_dtc_server
                 bool parse_accounts_response(const std::string &json, std::vector<AccountBalance> &accounts);
                 bool parse_portfolios_response(const std::string &json, std::vector<Portfolio> &portfolios);
                 bool parse_account_response(const std::string &json, AccountBalance &account);
+                bool parse_products_response(const std::string &json, std::vector<std::string> &symbols);
+                bool parse_products_filtered_response(const std::string &json, std::vector<Product> &products, ProductType filter_type);
+
+                // Helper methods
+                ProductType parse_product_type(const std::string &product_id) const;
+                std::string product_type_to_string(ProductType type) const;
 
                 // URL building
                 std::string build_url(const std::string &path) const;

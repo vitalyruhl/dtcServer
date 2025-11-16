@@ -59,8 +59,8 @@ namespace open_dtc_server
                                 ssl_websocket_client_->authenticate_with_jwt();
                                 
                                 // Start with basic subscriptions for common symbols
-                                ssl_websocket_client_->subscribe_to_ticker({"BTC-USD", "ETH-USD", "SOL-USD"});
-                                util::simple_log("[COINBASE] SSL WebSocket: Auto-subscribed to BTC-USD, ETH-USD, SOL-USD ticker");
+                                ssl_websocket_client_->subscribe_to_ticker({"BTC-USD"});
+                                util::simple_log("[COINBASE] SSL WebSocket: Auto-subscribed to BTC-USD ticker for testing");
                             } else {
                                 this->notify_connection(false);
                             } });

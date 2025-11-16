@@ -3,6 +3,7 @@
 #include "coinbase_dtc_core/core/dtc/protocol.hpp"
 #include "coinbase_dtc_core/exchanges/base/exchange_feed.hpp"
 #include "coinbase_dtc_core/exchanges/factory/exchange_factory.hpp"
+#include "coinbase_dtc_core/exchanges/coinbase/rest_client.hpp"
 #include <memory>
 #include <string>
 #include <thread>
@@ -227,6 +228,9 @@ namespace coinbase_dtc_core
 
                 // Protocol handling
                 std::unique_ptr<open_dtc_server::core::dtc::Protocol> protocol_;
+
+                // REST API clients
+                std::unique_ptr<open_dtc_server::exchanges::coinbase::CoinbaseRestClient> rest_client_;
 
                 // Exchange management
                 std::unique_ptr<open_dtc_server::exchanges::base::MultiExchangeFeed> multi_feed_;

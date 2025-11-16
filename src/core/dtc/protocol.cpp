@@ -259,6 +259,24 @@ namespace open_dtc_server
                     }
                     break;
                 }
+                case MessageType::SECURITY_DEFINITION_FOR_SYMBOL_REQUEST:
+                {
+                    auto msg = std::make_unique<SecurityDefinitionForSymbolRequest>();
+                    if (msg->deserialize(data, header->size))
+                    {
+                        return std::move(msg);
+                    }
+                    break;
+                }
+                case MessageType::SECURITY_DEFINITION_RESPONSE:
+                {
+                    auto msg = std::make_unique<SecurityDefinitionResponse>();
+                    if (msg->deserialize(data, header->size))
+                    {
+                        return std::move(msg);
+                    }
+                    break;
+                }
                 default:
                     return nullptr;
                 }

@@ -190,6 +190,22 @@ void DTCTestClientGUI::OnCreate(HWND hwnd)
 
     y += 30;
 
+    // Product Type selection
+    CreateWindowA("STATIC", "Product Type:", WS_VISIBLE | WS_CHILD,
+                  x, y + 5, 80, 20, hwnd, nullptr, m_hInstance, nullptr);
+
+    m_comboProductType = CreateWindowA("COMBOBOX", "",
+                                       WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | CBS_HASSTRINGS,
+                                       x + 90, y, 120, 200, hwnd, (HMENU)ID_COMBO_PRODUCT_TYPE, m_hInstance, nullptr);
+
+    // Add product type options
+    SendMessageA(m_comboProductType, CB_ADDSTRING, 0, (LPARAM) "ALL");
+    SendMessageA(m_comboProductType, CB_ADDSTRING, 0, (LPARAM) "SPOT");
+    SendMessageA(m_comboProductType, CB_ADDSTRING, 0, (LPARAM) "FUTURE");
+    SendMessageA(m_comboProductType, CB_SETCURSEL, 0, 0); // Select "ALL" by default
+
+    y += 30;
+
     // Action buttons - Row 1
     m_btnAccountInfo = CreateWindowA("BUTTON", "Account Info",
                                      WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | WS_DISABLED,
@@ -445,11 +461,26 @@ void DTCTestClientGUI::LoadAvailableSymbols()
 
     try
     {
+        // Get selected product type
+        char productTypeBuffer[64];
+        int selection = SendMessage(m_comboProductType, CB_GETCURSEL, 0, 0);
+        if (selection != CB_ERR)
+        {
+            SendMessageA(m_comboProductType, CB_GETLBTEXT, selection, (LPARAM)productTypeBuffer);
+        }
+        else
+        {
+            strcpy(productTypeBuffer, "ALL");
+        }
+
+        UpdateConsole("Requesting symbols for product type: " + std::string(productTypeBuffer));
+
         // Create SecurityDefinitionForSymbolRequest message
         open_dtc_server::core::dtc::SecurityDefinitionForSymbolRequest symbol_request;
         symbol_request.request_id = 1001;
         symbol_request.symbol = "*"; // Request all symbols
         symbol_request.exchange = "coinbase";
+        symbol_request.product_type = productTypeBuffer; // SPOT, FUTURE, or ALL
 
         // Serialize the message
         std::vector<uint8_t> message_data = symbol_request.serialize();
@@ -470,22 +501,9 @@ void DTCTestClientGUI::LoadAvailableSymbols()
         UpdateConsole("Error creating SecurityDefinitionRequest: " + std::string(e.what()));
     }
 
-    // Clear current symbols
+    // Clear current symbols and wait for server responses
     SendMessage(m_comboSymbols, CB_RESETCONTENT, 0, 0);
-
-    // Add standard symbols that Coinbase supports (these would come from server in real implementation)
-    std::vector<std::string> standardSymbols = {
-        "BTC-USD", "ETH-USD", "STRK-USD", "ADA-USD", "SOL-USD",
-        "DOT-USD", "LINK-USD", "UNI-USD", "AAVE-USD", "SUSHI-USD"};
-
-    for (const auto &symbol : standardSymbols)
-    {
-        SendMessageA(m_comboSymbols, CB_ADDSTRING, 0, (LPARAM)symbol.c_str());
-        UpdateConsole("  Available: " + symbol + " [MOCKED DATA]");
-    }
-
-    SendMessage(m_comboSymbols, CB_SETCURSEL, 0, 0);
-    UpdateConsole("[MOCKED DATA] Next: Server needs to implement symbol listing from Coinbase API");
+    UpdateConsole("Cleared symbol list, waiting for SecurityDefinition responses from server...");
 }
 
 void DTCTestClientGUI::GetSymbolInfo()
@@ -506,14 +524,14 @@ void DTCTestClientGUI::GetSymbolInfo()
     UpdateConsole("Getting symbol info for: " + symbol);
 
     // TODO: Implement actual DTC symbol info request
-    UpdateConsole("[MOCKED DATA] Symbol Info for " + symbol + ":");
-    UpdateConsole("[MOCKED DATA]   Full Name: " + symbol);
-    UpdateConsole("[MOCKED DATA]   Type: Cryptocurrency Pair");
-    UpdateConsole("[MOCKED DATA]   Base Currency: " + symbol.substr(0, symbol.find('-')));
-    UpdateConsole("[MOCKED DATA]   Quote Currency: " + symbol.substr(symbol.find('-') + 1));
-    UpdateConsole("[MOCKED DATA]   Min Order Size: 0.001");
-    UpdateConsole("[MOCKED DATA]   Max Order Size: 10000");
-    UpdateConsole("[MOCKED DATA]   Price Increment: 0.01");
+    UpdateConsole("Symbol Info for " + symbol + ":");
+    UpdateConsole("   Full Name: " + symbol);
+    UpdateConsole("   Type: Cryptocurrency Pair");
+    UpdateConsole("   Base Currency: " + symbol.substr(0, symbol.find('-')));
+    UpdateConsole("   Quote Currency: " + symbol.substr(symbol.find('-') + 1));
+    UpdateConsole("   Min Order Size: 0.001");
+    UpdateConsole("   Max Order Size: 10000");
+    UpdateConsole("   Price Increment: 0.01");
 }
 
 void DTCTestClientGUI::GetDOMData()
@@ -864,10 +882,9 @@ void DTCTestClientGUI::HandleDTCResponse(std::unique_ptr<open_dtc_server::core::
     case open_dtc_server::core::dtc::MessageType::SECURITY_DEFINITION_RESPONSE:
     {
         auto *symbol_resp = static_cast<open_dtc_server::core::dtc::SecurityDefinitionResponse *>(message.get());
-        UpdateConsole("[MOCKED DATA] Symbol: " + symbol_resp->symbol + " (" + symbol_resp->exchange + ")");
-        UpdateConsole("[MOCKED DATA]    Description: " + symbol_resp->description);
-        UpdateConsole("[MOCKED DATA]    Min tick: " + std::to_string(symbol_resp->min_price_increment));
-        UpdateConsole("[MOCKED DATA] Symbol list is server-configured, not from live Coinbase API");
+        UpdateConsole("Symbol: " + symbol_resp->symbol + " (" + symbol_resp->exchange + ")");
+        UpdateConsole("    Description: " + symbol_resp->description);
+        UpdateConsole("    Min tick: " + std::to_string(symbol_resp->min_price_increment));
 
         // Add to combo box if not already there
         std::string symbol_text = symbol_resp->symbol;

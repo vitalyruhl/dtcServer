@@ -31,14 +31,15 @@ enum ControlID
     ID_COMBO_SYMBOLS = 1005,
     ID_BTN_ACCOUNT_INFO = 1006,
     ID_BTN_LOAD_SYMBOLS = 1007,
-    ID_BTN_SYMBOL_INFO = 1008,
-    ID_BTN_DOM_DATA = 1009,
-    ID_BTN_SUBSCRIBE = 1010,
-    ID_BTN_UNSUBSCRIBE = 1011,
-    ID_BTN_CLEAR_CONSOLE = 1012,
-    ID_EDIT_CONSOLE = 1013,
-    ID_STATUS_BAR = 1014,
-    ID_EDIT_ACCOUNT_INFO = 1015
+    ID_COMBO_PRODUCT_TYPE = 1008,
+    ID_BTN_SYMBOL_INFO = 1009,
+    ID_BTN_DOM_DATA = 1010,
+    ID_BTN_SUBSCRIBE = 1011,
+    ID_BTN_UNSUBSCRIBE = 1012,
+    ID_BTN_CLEAR_CONSOLE = 1013,
+    ID_EDIT_CONSOLE = 1014,
+    ID_STATUS_BAR = 1015,
+    ID_EDIT_ACCOUNT_INFO = 1016
 };
 
 class DTCTestClientGUI
@@ -98,6 +99,7 @@ private:
     HWND m_btnUnsubscribe = nullptr;
     HWND m_btnClearConsole = nullptr;
     HWND m_comboSymbols = nullptr;
+    HWND m_comboProductType = nullptr;
     HWND m_editConsole = nullptr;
     HWND m_editAccountInfo = nullptr;
     HWND m_statusBar = nullptr;

@@ -33,6 +33,25 @@ namespace coinbase_dtc_core
                 : config_(config), server_running_(false)
             {
                 std::cout << "DTCServer initialized with config: " + config_.server_name << std::endl;
+
+                // Initialize REST client for Coinbase API access
+                try
+                {
+                    auto credentials = open_dtc_server::auth::CDPCredentials::from_json_file(config_.credentials_file_path);
+                    if (credentials.is_valid())
+                    {
+                        rest_client_ = std::make_unique<open_dtc_server::exchanges::coinbase::CoinbaseRestClient>(credentials);
+                        std::cout << "Coinbase REST client initialized successfully" << std::endl;
+                    }
+                    else
+                    {
+                        std::cout << "Warning: Invalid CDP credentials, REST client disabled" << std::endl;
+                    }
+                }
+                catch (const std::exception &e)
+                {
+                    std::cout << "Warning: Failed to initialize REST client: " << e.what() << std::endl;
+                }
             }
 
             DTCServer::~DTCServer()
@@ -614,12 +633,45 @@ namespace coinbase_dtc_core
                 {
                     auto *symbol_req = static_cast<open_dtc_server::core::dtc::SecurityDefinitionForSymbolRequest *>(message.get());
 
-                    std::cout << "SecurityDefinitionRequest: " + symbol_req->symbol + " on " + symbol_req->exchange << std::endl;
+                    std::cout << "SecurityDefinitionRequest: " + symbol_req->symbol + " on " + symbol_req->exchange + " (product_type: " + symbol_req->product_type + ")" << std::endl;
 
-                    // CONFIGURED: Send back hardcoded symbols (not live from Coinbase API yet)
-                    std::vector<std::string> symbols = {"BTC-USD", "ETH-USD", "SOL-USD"};
+                    // Determine product type filter
+                    open_dtc_server::exchanges::coinbase::ProductType product_filter = open_dtc_server::exchanges::coinbase::ProductType::ALL;
+                    if (symbol_req->product_type == "SPOT")
+                    {
+                        product_filter = open_dtc_server::exchanges::coinbase::ProductType::SPOT;
+                    }
+                    else if (symbol_req->product_type == "FUTURE")
+                    {
+                        product_filter = open_dtc_server::exchanges::coinbase::ProductType::FUTURE;
+                    }
 
-                    std::cout << "Using server-configured symbols (not live Coinbase API data)" << std::endl;
+                    // Fetch filtered products from Coinbase API
+                    std::vector<open_dtc_server::exchanges::coinbase::Product> products;
+                    std::vector<std::string> symbols;
+
+                    if (rest_client_ && rest_client_->get_products_filtered(products, product_filter))
+                    {
+                        // Extract symbols from products
+                        for (const auto &product : products)
+                        {
+                            symbols.push_back(product.product_id);
+                        }
+
+                        std::cout << "Retrieved " + std::to_string(symbols.size()) + " " + symbol_req->product_type + " symbols from Coinbase API" << std::endl;
+
+                        // Limit to reasonable number for UI
+                        if (symbols.size() > 20)
+                        {
+                            symbols.resize(20);
+                            std::cout << "Limited to first 20 symbols for GUI performance" << std::endl;
+                        }
+                    }
+                    else
+                    {
+                        std::cout << "Failed to fetch symbols from Coinbase API, using fallback list" << std::endl;
+                        symbols = {"BTC-USD"};
+                    }
 
                     for (const auto &symbol : symbols)
                     {
@@ -630,10 +682,9 @@ namespace coinbase_dtc_core
                         client->send_message(response_data);
                     }
 
-                    std::cout << "SecurityDefinition responses sent for " + std::to_string(symbols.size()) + " symbols [CONFIGURED DATA]" << std::endl;
+                    std::cout << "SecurityDefinition responses sent for " + std::to_string(symbols.size()) + " " + symbol_req->product_type + " symbols" << std::endl;
                     break;
                 }
-
                 case open_dtc_server::core::dtc::MessageType::MARKET_DATA_REQUEST:
                 {
                     auto *market_req = static_cast<open_dtc_server::core::dtc::MarketDataRequest *>(message.get());
@@ -872,18 +923,9 @@ namespace coinbase_dtc_core
             {
                 try
                 {
-                    // Map Coinbase currency to trading symbol format
+                    // Use currency directly from Coinbase API - no mapping
+                    // Client decides which symbols to request via SecurityDefinitionRequest
                     std::string symbol = currency;
-                    if (symbol == "BTC")
-                        symbol = "BTC-USD";
-                    else if (symbol == "ETH")
-                        symbol = "ETH-USD";
-                    else if (symbol == "SOL")
-                        symbol = "SOL-USD";
-                    else if (symbol == "USDC" || symbol == "EUR")
-                        symbol = currency; // Keep as-is for base currencies
-                    else
-                        symbol = currency + "-USD"; // Default mapping
 
                     double quantity = std::stod(total_balance);
                     double available_amount = std::stod(available);

@@ -96,6 +96,49 @@ namespace open_dtc_server
                 return parse_portfolios_response(response.body, portfolios);
             }
 
+            bool CoinbaseRestClient::get_products(std::vector<std::string> &symbols)
+            {
+                util::simple_log("[COINBASE-REST] Fetching available products/symbols...");
+
+                auto response = make_authenticated_request("GET", "market/products", "");
+
+                if (response.status_code != 200)
+                {
+                    last_error_ = "Failed to get products: HTTP " + std::to_string(response.status_code) + " - " + response.body;
+                    util::simple_log("[COINBASE-REST] " + last_error_);
+                    return false;
+                }
+
+                return parse_products_response(response.body, symbols);
+            }
+
+            bool CoinbaseRestClient::get_products_filtered(std::vector<Product> &products, ProductType type)
+            {
+                util::simple_log("[COINBASE-REST] Fetching products filtered by type: " + product_type_to_string(type));
+
+                auto response = make_authenticated_request("GET", "market/products", "");
+
+                if (response.status_code != 200)
+                {
+                    last_error_ = "Failed to get products: HTTP " + std::to_string(response.status_code) + " - " + response.body;
+                    util::simple_log("[COINBASE-REST] " + last_error_);
+                    return false;
+                }
+
+                return parse_products_filtered_response(response.body, products, type);
+            }
+
+            bool CoinbaseRestClient::get_product_types(std::vector<ProductType> &types)
+            {
+                types.clear();
+                types.push_back(ProductType::ALL);
+                types.push_back(ProductType::SPOT);
+                types.push_back(ProductType::FUTURE);
+
+                util::simple_log("[COINBASE-REST] Available product types: ALL, SPOT, FUTURE");
+                return true;
+            }
+
             bool CoinbaseRestClient::get_portfolio_summary(Portfolio &summary)
             {
                 util::simple_log("[COINBASE-REST] Getting portfolio summary...");
@@ -309,6 +352,106 @@ namespace open_dtc_server
                 }
             }
 
+            bool CoinbaseRestClient::parse_products_response(const std::string &json, std::vector<std::string> &symbols)
+            {
+                try
+                {
+                    auto parsed = nlohmann::json::parse(json);
+                    if (!parsed.contains("products"))
+                    {
+                        last_error_ = "Invalid products response: missing 'products' field";
+                        return false;
+                    }
+
+                    symbols.clear();
+                    for (const auto &product : parsed["products"])
+                    {
+                        std::string product_id = product.value("product_id", "");
+                        std::string status = product.value("status", "");
+                        bool trading_disabled = product.value("trading_disabled", true);
+
+                        // Only include active trading pairs
+                        if (!product_id.empty() && status == "online" && !trading_disabled)
+                        {
+                            symbols.push_back(product_id);
+                        }
+                    }
+
+                    util::simple_log("[COINBASE-REST] Parsed " + std::to_string(symbols.size()) + " active trading symbols");
+                    return true;
+                }
+                catch (const std::exception &e)
+                {
+                    last_error_ = "Error parsing products response: " + std::string(e.what());
+                    return false;
+                }
+            }
+
+            bool CoinbaseRestClient::parse_products_filtered_response(const std::string &json, std::vector<Product> &products, ProductType filter_type)
+            {
+                try
+                {
+                    auto parsed = nlohmann::json::parse(json);
+                    if (!parsed.contains("products"))
+                    {
+                        last_error_ = "Invalid products response: missing 'products' field";
+                        return false;
+                    }
+
+                    products.clear();
+                    for (const auto &product_json : parsed["products"])
+                    {
+                        std::string product_id = product_json.value("product_id", "");
+                        std::string status = product_json.value("status", "");
+                        bool trading_disabled = product_json.value("trading_disabled", true);
+
+                        // Only include active trading pairs
+                        if (product_id.empty() || status != "online" || trading_disabled)
+                        {
+                            continue;
+                        }
+
+                        Product product;
+                        product.product_id = product_id;
+                        product.display_name = product_json.value("display_name", product_id);
+                        product.base_currency = product_json.value("base_currency", "");
+                        product.quote_currency = product_json.value("quote_currency", "");
+                        product.status = status;
+                        product.trading_disabled = trading_disabled;
+                        product.product_type = parse_product_type(product_id);
+
+                        // Parse numeric values safely
+                        try
+                        {
+                            product.price_increment = std::stod(product_json.value("price_increment", "0.01"));
+                            product.base_min_size = std::stod(product_json.value("base_min_size", "0.001"));
+                            product.base_max_size = std::stod(product_json.value("base_max_size", "10000"));
+                        }
+                        catch (...)
+                        {
+                            // Use defaults if parsing fails
+                            product.price_increment = 0.01;
+                            product.base_min_size = 0.001;
+                            product.base_max_size = 10000.0;
+                        }
+
+                        // Apply filter
+                        if (filter_type == ProductType::ALL || product.product_type == filter_type)
+                        {
+                            products.push_back(product);
+                        }
+                    }
+
+                    util::simple_log("[COINBASE-REST] Parsed " + std::to_string(products.size()) + " filtered products (" + product_type_to_string(filter_type) + ")");
+                    return true;
+                }
+                catch (const std::exception &e)
+                {
+                    last_error_ = "Error parsing filtered products response: " + std::string(e.what());
+                    return false;
+                }
+            }
+
             std::string CoinbaseRestClient::build_url(const std::string &path) const
             {
                 // Remove leading slash if present
@@ -319,6 +462,41 @@ namespace open_dtc_server
                 }
 
                 return base_url_ + clean_path;
+            }
+
+            // Helper methods for product type handling
+            open_dtc_server::exchanges::coinbase::ProductType CoinbaseRestClient::parse_product_type(const std::string &product_id) const
+            {
+                // Simple heuristic for determining product type
+                if (product_id.find("-PERP") != std::string::npos ||
+                    product_id.find("FUTURE") != std::string::npos)
+                {
+                    return ProductType::FUTURE;
+                }
+                else if (product_id.find("-USD") != std::string::npos ||
+                         product_id.find("-EUR") != std::string::npos ||
+                         product_id.find("-GBP") != std::string::npos)
+                {
+                    return ProductType::SPOT;
+                }
+                return ProductType::UNKNOWN;
+            }
+
+            std::string CoinbaseRestClient::product_type_to_string(ProductType type) const
+            {
+                switch (type)
+                {
+                case ProductType::ALL:
+                    return "ALL";
+                case ProductType::SPOT:
+                    return "SPOT";
+                case ProductType::FUTURE:
+                    return "FUTURE";
+                case ProductType::UNKNOWN:
+                    return "UNKNOWN";
+                default:
+                    return "UNKNOWN";
+                }
             }
 
         } // namespace coinbase

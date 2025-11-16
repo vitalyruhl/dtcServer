@@ -48,6 +48,15 @@
  * - Observer pattern for market data updates
  * - Namespace organization: open_dtc_server is now the main namespace!
  * 
+ * DTC Protocol Architecture (CRITICAL RULE):
+ * - STRICT SEPARATION: Client NEVER communicates directly with exchange APIs
+ * - ALL DATA FLOW: Client ↔ DTC Server ↔ Coinbase API
+ * - Client ONLY uses DTC protocol messages (SecurityDefinitionRequest, MarketDataRequest, etc.)
+ * - Server handles ALL external API communication (REST, WebSocket)
+ * - NO EXCEPTIONS: Client must not import/use Coinbase REST client or any exchange-specific code
+ * - Data requests: Client sends DTC message → Server fetches from Coinbase → Server sends DTC response
+ * - This ensures clean protocol compliance and easy exchange swapping later
+ * 
  * Namespace Documentation Requirements:
  * - MANDATORY: Every new namespace MUST be documented in /dev-info/namespaces.md
  * - BEFORE creating any new namespace, update the namespaces.md file first
@@ -104,6 +113,16 @@
  * CRITICAL: NO MOCK DATA WITHOUT EXPLICIT USER REQUEST - only implement mock/test data when user explicitly asks for it
  * Production code should always fetch real data from APIs - mock data only for testing when specifically requested
  * 
+ * Executable Path Policy:
+ * - ALWAYS use full absolute paths for executables to prevent PowerShell path confusion
+ * - DTC Server executable: & "C:\Daten\_Codding\coinbase-dtc-core\build\Release\coinbase_dtc_server.exe"
+ * - DTC Server with credentials: cd C:\Daten\_Codding\coinbase-dtc-core\build\Release; .\coinbase_dtc_server.exe --credentials "C:\Daten\_Codding\coinbase-dtc-core\secrets\coinbase\cdp_api_key_ECDSA.json"
+ * - GUI Test Client executable: & "C:\Daten\_Codding\coinbase-dtc-core\build\Release\dtc_test_client_gui.exe"
+ * - CRITICAL: Use PowerShell call operator (&) when using quoted full paths, OR change directory first and use relative paths
+ * - NEVER use relative paths like .\Release\executable.exe without changing directory first
+ * - When running executables in PowerShell, always use the complete full path from C:\ OR change to the directory first
+ * - Debug versions are in build\Debug\ directory, Release versions in build\Release\ directory
+ *
  * Problem Resolution Policy:
  * - Never mark problems as "solved" or "fixed" until user explicitly confirms the fix works
  * - Always test end-to-end functionality before claiming success

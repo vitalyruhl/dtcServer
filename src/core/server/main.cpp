@@ -89,10 +89,9 @@ int main(int argc, char *argv[])
         {
             open_dtc_server::util::write_log("[SUCCESS] Added Coinbase exchange for real market data");
 
-            // Subscribe to specific symbols
+            // Subscribe to specific symbols for testing
             srv.subscribe_symbol("BTC-USD", "coinbase");
-            srv.subscribe_symbol("ETH-USD", "coinbase");
-            srv.subscribe_symbol("SOL-USD", "coinbase");
+            // Removed ETH-USD and SOL-USD to keep logs clean for testing
         }
         open_dtc_server::util::write_log("Server configured, starting...");
 

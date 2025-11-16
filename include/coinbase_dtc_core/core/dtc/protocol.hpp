@@ -415,6 +415,7 @@ namespace open_dtc_server
                 uint32_t request_id = 0;
                 std::string symbol;
                 std::string exchange;
+                std::string product_type; // "ALL", "SPOT", "FUTURE", etc.
 
                 MessageType get_type() const override { return MessageType::SECURITY_DEFINITION_FOR_SYMBOL_REQUEST; }
                 uint16_t get_size() const override;
