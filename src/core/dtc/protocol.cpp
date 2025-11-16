@@ -150,7 +150,7 @@ namespace open_dtc_server
             // SecurityDefinitionForSymbolRequest implementation
             uint16_t SecurityDefinitionForSymbolRequest::get_size() const
             {
-                return sizeof(MessageHeader) + 50;
+                return sizeof(MessageHeader) + sizeof(uint32_t) + symbol.length() + 1 + exchange.length() + 1 + product_type.length() + 1;
             }
 
             std::vector<uint8_t> SecurityDefinitionForSymbolRequest::serialize() const
@@ -158,18 +158,88 @@ namespace open_dtc_server
                 std::vector<uint8_t> buffer(get_size());
                 MessageHeader header(get_size(), get_type());
                 std::memcpy(buffer.data(), &header, sizeof(MessageHeader));
+
+                uint8_t *ptr = buffer.data() + sizeof(MessageHeader);
+
+                // Write request_id
+                std::memcpy(ptr, &request_id, sizeof(uint32_t));
+                ptr += sizeof(uint32_t);
+
+                // Write symbol (null-terminated)
+                std::memcpy(ptr, symbol.c_str(), symbol.length() + 1);
+                ptr += symbol.length() + 1;
+
+                // Write exchange (null-terminated)
+                std::memcpy(ptr, exchange.c_str(), exchange.length() + 1);
+                ptr += exchange.length() + 1;
+
+                // Write product_type (null-terminated)
+                std::memcpy(ptr, product_type.c_str(), product_type.length() + 1);
+
                 return buffer;
             }
 
             bool SecurityDefinitionForSymbolRequest::deserialize(const uint8_t *data, uint16_t size)
             {
-                return size >= sizeof(MessageHeader);
+                if (size < sizeof(MessageHeader) + sizeof(uint32_t))
+                {
+                    return false;
+                }
+
+                // Skip message header
+                const uint8_t *ptr = data + sizeof(MessageHeader);
+                size_t remaining = size - sizeof(MessageHeader);
+
+                // Read request_id
+                if (remaining < sizeof(uint32_t))
+                    return false;
+                std::memcpy(&request_id, ptr, sizeof(uint32_t));
+                ptr += sizeof(uint32_t);
+                remaining -= sizeof(uint32_t);
+
+                // Read symbol (null-terminated string)
+                const char *symbol_start = reinterpret_cast<const char *>(ptr);
+                size_t symbol_len = strnlen(symbol_start, remaining);
+                if (symbol_len == remaining)
+                    return false; // No null terminator found
+                symbol.assign(symbol_start, symbol_len);
+                ptr += symbol_len + 1; // +1 for null terminator
+                remaining -= symbol_len + 1;
+
+                // Read exchange (null-terminated string)
+                if (remaining == 0)
+                    return false;
+                const char *exchange_start = reinterpret_cast<const char *>(ptr);
+                size_t exchange_len = strnlen(exchange_start, remaining);
+                if (exchange_len == remaining)
+                    return false; // No null terminator found
+                exchange.assign(exchange_start, exchange_len);
+                ptr += exchange_len + 1;
+                remaining -= exchange_len + 1;
+
+                // Read product_type (null-terminated string)
+                if (remaining == 0)
+                    return false;
+                const char *product_type_start = reinterpret_cast<const char *>(ptr);
+                size_t product_type_len = strnlen(product_type_start, remaining);
+                if (product_type_len == remaining)
+                    return false; // No null terminator found
+                product_type.assign(product_type_start, product_type_len);
+
+                return true;
             }
 
             // SecurityDefinitionResponse implementation
             uint16_t SecurityDefinitionResponse::get_size() const
             {
-                return sizeof(MessageHeader) + 100;
+                return sizeof(MessageHeader) + sizeof(uint32_t) + // request_id
+                       symbol.length() + 1 +                      // symbol + null terminator
+                       exchange.length() + 1 +                    // exchange + null terminator
+                       description.length() + 1 +                 // description + null terminator
+                       currency.length() + 1 +                    // currency + null terminator
+                       sizeof(uint32_t) +                         // security_type
+                       sizeof(float) * 4 +                        // price increments, contract_size
+                       sizeof(uint8_t);                           // has_market_depth_data
             }
 
             std::vector<uint8_t> SecurityDefinitionResponse::serialize() const
@@ -177,12 +247,128 @@ namespace open_dtc_server
                 std::vector<uint8_t> buffer(get_size());
                 MessageHeader header(get_size(), get_type());
                 std::memcpy(buffer.data(), &header, sizeof(MessageHeader));
+
+                uint8_t *ptr = buffer.data() + sizeof(MessageHeader);
+
+                // Write request_id
+                std::memcpy(ptr, &request_id, sizeof(uint32_t));
+                ptr += sizeof(uint32_t);
+
+                // Write symbol (null-terminated)
+                std::memcpy(ptr, symbol.c_str(), symbol.length() + 1);
+                ptr += symbol.length() + 1;
+
+                // Write exchange (null-terminated)
+                std::memcpy(ptr, exchange.c_str(), exchange.length() + 1);
+                ptr += exchange.length() + 1;
+
+                // Write description (null-terminated)
+                std::memcpy(ptr, description.c_str(), description.length() + 1);
+                ptr += description.length() + 1;
+
+                // Write currency (null-terminated)
+                std::memcpy(ptr, currency.c_str(), currency.length() + 1);
+                ptr += currency.length() + 1;
+
+                // Write security_type
+                std::memcpy(ptr, &security_type, sizeof(uint32_t));
+                ptr += sizeof(uint32_t);
+
+                // Write price increments
+                std::memcpy(ptr, &min_price_increment, sizeof(float));
+                ptr += sizeof(float);
+                std::memcpy(ptr, &currency_value_per_increment, sizeof(float));
+                ptr += sizeof(float);
+
+                // Write contract_size
+                std::memcpy(ptr, &contract_size, sizeof(float));
+                ptr += sizeof(float);
+
+                // Write has_market_depth_data
+                std::memcpy(ptr, &has_market_depth_data, sizeof(uint8_t));
+
                 return buffer;
             }
 
             bool SecurityDefinitionResponse::deserialize(const uint8_t *data, uint16_t size)
             {
-                return size >= sizeof(MessageHeader);
+                if (size < sizeof(MessageHeader) + sizeof(uint32_t))
+                {
+                    return false;
+                }
+
+                // Skip message header
+                const uint8_t *ptr = data + sizeof(MessageHeader);
+                size_t remaining = size - sizeof(MessageHeader);
+
+                // Read request_id
+                if (remaining < sizeof(uint32_t))
+                    return false;
+                std::memcpy(&request_id, ptr, sizeof(uint32_t));
+                ptr += sizeof(uint32_t);
+                remaining -= sizeof(uint32_t);
+
+                // Read symbol (null-terminated string)
+                const char *symbol_start = reinterpret_cast<const char *>(ptr);
+                size_t symbol_len = strnlen(symbol_start, remaining);
+                if (symbol_len == remaining)
+                    return false; // No null terminator found
+                symbol.assign(symbol_start, symbol_len);
+                ptr += symbol_len + 1;
+                remaining -= symbol_len + 1;
+
+                // Read exchange (null-terminated string)
+                if (remaining == 0)
+                    return false;
+                const char *exchange_start = reinterpret_cast<const char *>(ptr);
+                size_t exchange_len = strnlen(exchange_start, remaining);
+                if (exchange_len == remaining)
+                    return false;
+                exchange.assign(exchange_start, exchange_len);
+                ptr += exchange_len + 1;
+                remaining -= exchange_len + 1;
+
+                // Read description (null-terminated string)
+                if (remaining == 0)
+                    return false;
+                const char *description_start = reinterpret_cast<const char *>(ptr);
+                size_t description_len = strnlen(description_start, remaining);
+                if (description_len == remaining)
+                    return false;
+                description.assign(description_start, description_len);
+                ptr += description_len + 1;
+                remaining -= description_len + 1;
+
+                // Read currency (null-terminated string)
+                if (remaining == 0)
+                    return false;
+                const char *currency_start = reinterpret_cast<const char *>(ptr);
+                size_t currency_len = strnlen(currency_start, remaining);
+                if (currency_len == remaining)
+                    return false;
+                currency.assign(currency_start, currency_len);
+                ptr += currency_len + 1;
+                remaining -= currency_len + 1;
+
+                // Read remaining numeric fields
+                if (remaining < sizeof(uint32_t) + sizeof(float) * 3 + sizeof(uint8_t))
+                    return false;
+
+                std::memcpy(&security_type, ptr, sizeof(uint32_t));
+                ptr += sizeof(uint32_t);
+
+                std::memcpy(&min_price_increment, ptr, sizeof(float));
+                ptr += sizeof(float);
+
+                std::memcpy(&currency_value_per_increment, ptr, sizeof(float));
+                ptr += sizeof(float);
+
+                std::memcpy(&contract_size, ptr, sizeof(float));
+                ptr += sizeof(float);
+
+                std::memcpy(&has_market_depth_data, ptr, sizeof(uint8_t));
+
+                return true;
             }
 
             // Protocol class implementation

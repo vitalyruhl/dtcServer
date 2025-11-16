@@ -422,6 +422,19 @@ if (BUILD_TESTING AND ENABLE_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/settings
     )
     
+    # DTC Console Test Client - for testing DTC protocol communication
+    add_executable(test_dtc_console
+        src/tests/test_dtc_console.cpp
+    )
+    target_link_libraries(test_dtc_console
+        dtc_protocol
+        dtc_util
+    )
+    target_include_directories(test_dtc_console PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    
     # TEMPORARY: Disabled due to namespace migration issues
     # add_executable(test_environment
     #     tests/integration/test_environment.cpp

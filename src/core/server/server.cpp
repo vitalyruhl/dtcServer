@@ -633,7 +633,11 @@ namespace coinbase_dtc_core
                 {
                     auto *symbol_req = static_cast<open_dtc_server::core::dtc::SecurityDefinitionForSymbolRequest *>(message.get());
 
-                    std::cout << "SecurityDefinitionRequest: " + symbol_req->symbol + " on " + symbol_req->exchange + " (product_type: " + symbol_req->product_type + ")" << std::endl;
+                    std::cout << "[DTC-SERVER] *** SecurityDefinitionForSymbolRequest RECEIVED ***" << std::endl;
+                    std::cout << "[DTC-SERVER] Request ID: " << symbol_req->request_id << std::endl;
+                    std::cout << "[DTC-SERVER] Symbol: '" << symbol_req->symbol << "'" << std::endl;
+                    std::cout << "[DTC-SERVER] Exchange: '" << symbol_req->exchange << "'" << std::endl;
+                    std::cout << "[DTC-SERVER] Product Type: '" << symbol_req->product_type << "'" << std::endl;
 
                     // Determine product type filter
                     open_dtc_server::exchanges::coinbase::ProductType product_filter = open_dtc_server::exchanges::coinbase::ProductType::ALL;
@@ -650,6 +654,7 @@ namespace coinbase_dtc_core
                     std::vector<open_dtc_server::exchanges::coinbase::Product> products;
                     std::vector<std::string> symbols;
 
+                    std::cout << "[DTC-SERVER] Calling Coinbase API for " << symbol_req->product_type << " products..." << std::endl;
                     if (rest_client_ && rest_client_->get_products_filtered(products, product_filter))
                     {
                         // Extract symbols from products
@@ -658,9 +663,10 @@ namespace coinbase_dtc_core
                             symbols.push_back(product.product_id);
                         }
 
-                        std::cout << "Retrieved " + std::to_string(symbols.size()) + " " + symbol_req->product_type + " symbols from Coinbase API" << std::endl;
+                        std::cout << "[DTC-SERVER] *** Coinbase API SUCCESS *** Retrieved " << symbols.size() << " symbols" << std::endl;
 
                         // Limit to reasonable number for UI
+                        // todo: remove it if server ready
                         if (symbols.size() > 20)
                         {
                             symbols.resize(20);
@@ -669,10 +675,19 @@ namespace coinbase_dtc_core
                     }
                     else
                     {
-                        std::cout << "Failed to fetch symbols from Coinbase API, using fallback list" << std::endl;
+                        std::cout << "[DTC-SERVER] *** Coinbase API FAILED *** Using fallback" << std::endl;
+                        if (rest_client_)
+                        {
+                            std::cout << "[DTC-SERVER] REST client exists but get_products_filtered failed" << std::endl;
+                        }
+                        else
+                        {
+                            std::cout << "[DTC-SERVER] REST client is NULL" << std::endl;
+                        }
                         symbols = {"BTC-USD"};
                     }
 
+                    std::cout << "[DTC-SERVER] Sending " << symbols.size() << " SecurityDefinitionResponse messages..." << std::endl;
                     for (const auto &symbol : symbols)
                     {
                         auto symbol_response = protocol.create_security_definition_response(

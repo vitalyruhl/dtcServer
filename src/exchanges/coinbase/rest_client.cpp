@@ -114,16 +114,21 @@ namespace open_dtc_server
 
             bool CoinbaseRestClient::get_products_filtered(std::vector<Product> &products, ProductType type)
             {
-                util::simple_log("[COINBASE-REST] Fetching products filtered by type: " + product_type_to_string(type));
+                util::simple_log("[COINBASE-REST] *** get_products_filtered CALLED *** Type: " + product_type_to_string(type));
 
+                util::simple_log("[COINBASE-REST] Making authenticated request to market/products...");
                 auto response = make_authenticated_request("GET", "market/products", "");
 
+                util::simple_log("[COINBASE-REST] API Response - Status Code: " + std::to_string(response.status_code));
                 if (response.status_code != 200)
                 {
                     last_error_ = "Failed to get products: HTTP " + std::to_string(response.status_code) + " - " + response.body;
-                    util::simple_log("[COINBASE-REST] " + last_error_);
+                    util::simple_log("[COINBASE-REST] *** API ERROR *** " + last_error_);
                     return false;
                 }
+
+                util::simple_log("[COINBASE-REST] API SUCCESS - Response body length: " + std::to_string(response.body.length()));
+                util::simple_log("[COINBASE-REST] Response preview: " + response.body.substr(0, 200) + "...");
 
                 return parse_products_filtered_response(response.body, products, type);
             }
@@ -389,18 +394,30 @@ namespace open_dtc_server
 
             bool CoinbaseRestClient::parse_products_filtered_response(const std::string &json, std::vector<Product> &products, ProductType filter_type)
             {
+                util::simple_log("[COINBASE-REST] *** parse_products_filtered_response CALLED ***");
+                util::simple_log("[COINBASE-REST] Filter type: " + product_type_to_string(filter_type));
+                util::simple_log("[COINBASE-REST] JSON length: " + std::to_string(json.length()));
+
                 try
                 {
+                    util::simple_log("[COINBASE-REST] Parsing JSON response...");
                     auto parsed = nlohmann::json::parse(json);
+
                     if (!parsed.contains("products"))
                     {
                         last_error_ = "Invalid products response: missing 'products' field";
+                        util::simple_log("[COINBASE-REST] *** JSON ERROR *** " + last_error_);
                         return false;
                     }
 
+                    util::simple_log("[COINBASE-REST] Found products array with " + std::to_string(parsed["products"].size()) + " items");
                     products.clear();
+                    int processed_count = 0;
+                    int filtered_count = 0;
+
                     for (const auto &product_json : parsed["products"])
                     {
+                        processed_count++;
                         std::string product_id = product_json.value("product_id", "");
                         std::string status = product_json.value("status", "");
                         bool trading_disabled = product_json.value("trading_disabled", true);
@@ -439,15 +456,22 @@ namespace open_dtc_server
                         if (filter_type == ProductType::ALL || product.product_type == filter_type)
                         {
                             products.push_back(product);
+                            filtered_count++;
+                            if (filtered_count <= 5)
+                            {
+                                util::simple_log("[COINBASE-REST] Added product: " + product_id + " (type: " + product_type_to_string(product.product_type) + ")");
+                            }
                         }
                     }
 
-                    util::simple_log("[COINBASE-REST] Parsed " + std::to_string(products.size()) + " filtered products (" + product_type_to_string(filter_type) + ")");
+                    util::simple_log("[COINBASE-REST] *** PARSING COMPLETE *** Processed: " + std::to_string(processed_count) + ", Filtered: " + std::to_string(filtered_count) + " (" + product_type_to_string(filter_type) + ")");
                     return true;
                 }
                 catch (const std::exception &e)
                 {
                     last_error_ = "Error parsing filtered products response: " + std::string(e.what());
+                    util::simple_log("[COINBASE-REST] *** PARSE EXCEPTION *** " + last_error_);
+                    util::simple_log("[COINBASE-REST] JSON causing error: " + json.substr(0, 500) + "...");
                     return false;
                 }
             }
