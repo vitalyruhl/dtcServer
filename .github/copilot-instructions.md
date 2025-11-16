@@ -127,8 +127,18 @@
  * - Never mark problems as "solved" or "fixed" until user explicitly confirms the fix works
  * - Always test end-to-end functionality before claiming success
  * - If tests fail or user reports continued issues, acknowledge the problem persists
- * - Only declare success when: (1) All tests pass, OR (2) User explicitly confirms the fix works
- * Use emojis appropriately to indicate status: ✅ for done, 🚧 for in-progress, ⚠️ for warnings, but not in code
+ * - Only declare success when: (1) All tests pass in Docker CI, OR (2) User explicitly confirms the fix works
+ * - Use emojis appropriately to indicate status: ✅ for done, 🚧 for in-progress, ⚠️ for warnings, but not in code
+ * 
+ * FINAL CI/CD POLICY - MASTER MERGE REQUIREMENTS:
+ * - MANDATORY: ALL Docker CI tests must pass before any merge to master/main
+ * - ZERO TOLERANCE: No exceptions for failed CI tests - automatic PR rejection
+ * - DOCKER VALIDATION: Use "docker build -f Dockerfile.ci --target ci-test" for validation
+ * - CREDENTIAL TESTING: All integration tests must run with real Coinbase credentials
+ * - ARCHITECTURE SUPPORT: Both Windows development and Linux production must work
+ * - TEST COVERAGE: Minimum 90% test success rate (currently 15/16 = 94%)
+ * - DOCUMENTATION: README.md, TODO.md, and MERGE-CHECKLIST.md must be current
+ * - PRODUCTION READY: Every master merge must be deployable to Unraid Docker immediately
  * 
  * GitHub Actions & Continuous Integration:
  * - ALL DTC protocol functions must have automated test coverage
@@ -137,4 +147,22 @@
  * - Test matrix should cover all supported DTC message types
  * - Integration tests must validate end-to-end data flow from Coinbase API through DTC protocol to client
  * - Performance benchmarks for latency-critical operations
+ * 
+ * CI/CD Policy & Pull Request Requirements:
+ * - CRITICAL: ALL tests must pass in Docker CI before any PR can be merged to main/master
+ * - Development happens on Windows, but CI validation is Linux-based (Ubuntu)
+ * - Coinbase API credentials are injected via GitHub Secrets (CDP_API_KEY_ID, CDP_PRIVATE_KEY)
+ * - Integration tests run with real Coinbase credentials in CI environment
+ * - NO EXCEPTIONS: Failed CI tests = automatic PR rejection
+ * - Docker containers must support both architectures (x64 Windows for dev, x64 Linux for production)
+ * - Dockerfile.ci is the authoritative CI/CD test configuration
+ * - Production deployment target: Docker on Unraid (Linux)
+ * 
+ * Multi-Architecture Support:
+ * - CMakeLists.linux.txt: Linux CI/CD and production builds (no GUI)
+ * - CMakeLists.windows.txt: Windows development builds (with GUI)
+ * - Main CMakeLists.txt: Platform-agnostic core functionality
+ * - ALL code except GUI test client must be cross-platform compatible
+ * - Use conditional compilation (#ifdef _WIN32) for platform-specific code
+ * - Docker production stage creates minimal runtime image for Unraid deployment
  */

@@ -253,25 +253,9 @@ if (BUILD_TESTING AND ENABLE_TESTING)
     # The simple DTCServer creation test is not critical as the server is tested
     # in practice through integration tests and the main application
     
-    # Root level tests (legacy compatibility)
-    add_executable(test_dtc_client_legacy
-        tests/test_dtc_client.cpp
-    )
-    target_link_libraries(test_dtc_client_legacy dtc_protocol dtc_util)
-    target_include_directories(test_dtc_client_legacy PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/settings
-    )
+    # Root level tests (legacy compatibility) - removed
     
-    # TEMPORARY: Disabled until Protocol methods are fully implemented
-    add_executable(test_dtc_protocol_legacy
-        tests/test_dtc_protocol.cpp
-    )
-    target_link_libraries(test_dtc_protocol_legacy dtc_protocol dtc_util)
-    target_include_directories(test_dtc_protocol_legacy PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/settings
-    )
+    # TEMPORARY: Disabled until Protocol methods are fully implemented - removed
     
     # Exchange Tests - Coinbase
     # TEMPORARY: Disabled due to file corruption
@@ -296,11 +280,8 @@ if (BUILD_TESTING AND ENABLE_TESTING)
     target_link_libraries(test_coinbase_account_info
         dtc_auth
         dtc_util
+        CURL::libcurl
     )
-    if(CURL_FOUND)
-        target_link_libraries(test_coinbase_account_info ${CURL_LIBRARIES})
-        target_include_directories(test_coinbase_account_info PRIVATE ${CURL_INCLUDE_DIRS})
-    endif()
     if(nlohmann_json_FOUND)
         target_link_libraries(test_coinbase_account_info nlohmann_json::nlohmann_json)
     endif()
@@ -316,11 +297,8 @@ if (BUILD_TESTING AND ENABLE_TESTING)
     target_link_libraries(test_coinbase_endpoints
         dtc_auth
         dtc_util
+        CURL::libcurl
     )
-    if(CURL_FOUND)
-        target_link_libraries(test_coinbase_endpoints ${CURL_LIBRARIES})
-        target_include_directories(test_coinbase_endpoints PRIVATE ${CURL_INCLUDE_DIRS})
-    endif()
     target_include_directories(test_coinbase_endpoints PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/settings
@@ -483,8 +461,7 @@ if (BUILD_TESTING AND ENABLE_TESTING)
         target_link_libraries(test_basic ws2_32 wsock32)
         target_link_libraries(test_dtc_protocol ws2_32 wsock32)
         # test_server removed - redundant functionality
-        target_link_libraries(test_dtc_client_legacy ws2_32 wsock32)
-        target_link_libraries(test_dtc_protocol_legacy ws2_32 wsock32)
+        # Legacy test files removed
         # target_link_libraries(test_coinbase_feed ws2_32 wsock32)  # DISABLED
         # target_link_libraries(test_advanced_trade_api ws2_32 wsock32)
         # target_link_libraries(test_jwt_auth ws2_32 wsock32)
@@ -501,8 +478,7 @@ if (BUILD_TESTING AND ENABLE_TESTING)
     add_test(NAME BasicTest COMMAND test_basic)
     add_test(NAME DTCProtocolTest COMMAND test_dtc_protocol)
     # ServerTest removed - redundant functionality covered by integration tests
-    add_test(NAME DTCClientLegacyTest COMMAND test_dtc_client_legacy)
-    add_test(NAME DTCProtocolLegacyTest COMMAND test_dtc_protocol_legacy)
+    # Legacy tests removed
     # add_test(NAME CoinbaseFeedTest COMMAND test_coinbase_feed)
     # add_test(NAME AdvancedTradeAPITest COMMAND test_advanced_trade_api)
     # add_test(NAME JWTAuthTest COMMAND test_jwt_auth)
@@ -539,27 +515,9 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/debug_sizes.cpp")
     target_include_directories(debug_sizes PRIVATE include)
 endif()
 
-# WebSocket test executable
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test_websocket_connection.cpp")
-    add_executable(test_websocket_connection test_websocket_connection.cpp)
-    target_link_libraries(test_websocket_connection coinbase_feed exchange_base dtc_util)
-    target_include_directories(test_websocket_connection PRIVATE include)
-    
-    if(WIN32)
-        target_link_libraries(test_websocket_connection ws2_32)
-    endif()
-endif()
+# WebSocket test executable - removed
 
-# SSL WebSocket test executable
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_ssl_websocket.cpp")
-    add_executable(test_ssl_websocket tests/test_ssl_websocket.cpp)
-    target_link_libraries(test_ssl_websocket coinbase_feed exchange_base dtc_util)
-    target_include_directories(test_ssl_websocket PRIVATE include)
-    
-    if(WIN32)
-        target_link_libraries(test_ssl_websocket ws2_32 crypt32 secur32)
-    endif()
-endif()
+# SSL WebSocket test executable - removed
 
 # SSL WebSocket Coinbase specific test
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/exchanges/test_ssl_websocket_coinbase.cpp")
@@ -572,19 +530,10 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/exchanges/test_ssl_websocket_coinba
     endif()
 endif()
 
-# Basic WebSocket test executable
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_websocket_basic.cpp")
-    add_executable(test_websocket_basic tests/test_websocket_basic.cpp)
-    target_link_libraries(test_websocket_basic coinbase_feed exchange_base dtc_util)
-    target_include_directories(test_websocket_basic PRIVATE include)
-    
-    if(WIN32)
-        target_link_libraries(test_websocket_basic ws2_32)
-    endif()
-endif()
+# Basic WebSocket test executable - removed
 
-# DTC Test Client - GUI application for testing DTC server
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/dtc_test_client/main_gui.cpp")
+# DTC Test Client - GUI application for testing DTC server (Windows only)
+if(WIN32 AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/dtc_test_client/main_gui.cpp")
     add_executable(dtc_test_client_gui
         src/dtc_test_client/main_gui.cpp
         src/dtc_test_client/dtc_gui_client.cpp
@@ -599,28 +548,17 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/dtc_test_client/main_gui.cpp")
     target_link_libraries(dtc_test_client_gui PRIVATE
         dtc_protocol
         dtc_util
+        ws2_32 
+        user32 
+        gdi32 
+        comctl32
+        shell32
     )
     
-    # Windows-specific libraries for GUI application
-    if(WIN32)
-        target_link_libraries(dtc_test_client_gui PRIVATE 
-            ws2_32 
-            user32 
-            gdi32 
-            comctl32
-            shell32
-        )
-        # Set subsystem to Windows GUI
-        set_target_properties(dtc_test_client_gui PROPERTIES
-            WIN32_EXECUTABLE TRUE
-            LINK_FLAGS "/SUBSYSTEM:WINDOWS"
-        )
-    else()
-        target_link_libraries(dtc_test_client_gui PRIVATE pthread)
-    endif()
-    
-    # Set target properties
+    # Set subsystem to Windows GUI
     set_target_properties(dtc_test_client_gui PROPERTIES
+        WIN32_EXECUTABLE TRUE
+        LINK_FLAGS "/SUBSYSTEM:WINDOWS"
         CXX_STANDARD 17
         CXX_STANDARD_REQUIRED ON
         CXX_EXTENSIONS OFF

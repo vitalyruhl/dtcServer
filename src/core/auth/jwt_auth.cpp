@@ -7,10 +7,12 @@
 #include <jwt-cpp/jwt.h>
 // Include the correct traits for nlohmann json
 #ifdef HAS_NLOHMANN_JSON
+#include <nlohmann/json.hpp>
 #include <jwt-cpp/traits/nlohmann-json/traits.h>
 using json_traits = jwt::traits::nlohmann_json;
 #else
 // Use default picojson traits if nlohmann is not available
+#include <jwt-cpp/traits/picojson/traits.h>
 using json_traits = jwt::traits::picojson;
 #endif
 #endif

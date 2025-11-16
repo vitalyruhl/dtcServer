@@ -2,6 +2,7 @@
 #include <thread>
 #include <chrono>
 #include <string>
+#include <cstring> // For memcpy
 
 #ifdef _WIN32
 #include <winsock2.h>

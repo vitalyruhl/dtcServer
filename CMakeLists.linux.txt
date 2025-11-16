@@ -1,0 +1,40 @@
+# CMake configuration for Linux CI/CD and production
+# Excludes Windows-specific components
+
+cmake_minimum_required(VERSION 3.16)
+
+# Include main CMakeLists.txt
+include(${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt)
+
+# Linux-specific overrides
+if(UNIX AND NOT APPLE)
+    message(STATUS "🐧 Linux build configuration active")
+    
+    # Disable Windows-specific targets
+    set(BUILD_GUI_CLIENT OFF CACHE BOOL "Disable GUI client on Linux" FORCE)
+    
+    # Ensure all tests are built
+    set(BUILD_ALL_TESTS ON CACHE BOOL "Build all tests for CI" FORCE)
+    
+    # Optimization for CI builds
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -DNDEBUG")
+        message(STATUS "🚀 Optimized release build for CI")
+    endif()
+    
+    # Enable additional warnings in CI
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
+    
+endif()
+
+# CI/CD specific settings
+if(DEFINED ENV{CI})
+    message(STATUS "🤖 CI/CD environment detected")
+    
+    # Parallel build optimization
+    set(CMAKE_BUILD_PARALLEL_LEVEL 0 CACHE STRING "Use all available cores")
+    
+    # Ensure reproducible builds
+    set(CMAKE_BUILD_RPATH_USE_ORIGIN TRUE)
+    
+endif()

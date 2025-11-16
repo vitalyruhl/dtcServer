@@ -1,0 +1,39 @@
+# CMake configuration for Windows development
+# Includes GUI components and Windows-specific features
+
+cmake_minimum_required(VERSION 3.16)
+
+# Include main CMakeLists.txt
+include(${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt)
+
+# Windows-specific overrides
+if(WIN32)
+    message(STATUS "🪟 Windows build configuration active")
+    
+    # Enable Windows-specific features
+    set(BUILD_GUI_CLIENT ON CACHE BOOL "Enable GUI client on Windows" FORCE)
+    
+    # Windows optimization
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /O2")
+        message(STATUS "🚀 Optimized release build for Windows")
+    endif()
+    
+    # Enable Visual Studio-specific features
+    if(MSVC)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W3")
+        set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT coinbase_dtc_server)
+    endif()
+    
+endif()
+
+# Development-specific settings
+message(STATUS "🔧 Development environment configuration")
+
+# Enable all debugging features in development
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Set default startup project for Visual Studio
+if(CMAKE_GENERATOR MATCHES "Visual Studio")
+    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT coinbase_dtc_server)
+endif()

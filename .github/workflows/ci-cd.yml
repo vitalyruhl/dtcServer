@@ -1,0 +1,106 @@
+name: CI/CD - Comprehensive Testing
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+    
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    name: 🧪 Comprehensive Test Suite
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+      
+    - name: 🐳 Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: 🔑 Login to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: 🏗️ Build and Test
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile.ci
+        target: ci-test
+        build-args: |
+          CDP_API_KEY_ID=${{ secrets.CDP_API_KEY_ID }}
+          CDP_PRIVATE_KEY=${{ secrets.CDP_PRIVATE_KEY }}
+        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:test-${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+    - name: 📊 Test Results Summary
+      if: always()
+      run: |
+        echo "### 🎯 CI Test Results" >> $GITHUB_STEP_SUMMARY
+        if [ $? -eq 0 ]; then
+          echo "✅ All tests passed successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "🚀 Ready for deployment to production" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ Tests failed - PR cannot be merged" >> $GITHUB_STEP_SUMMARY
+          echo "🔧 Please fix failing tests before merging" >> $GITHUB_STEP_SUMMARY
+          exit 1
+        fi
+
+  build-production:
+    name: 🚀 Production Build
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+    - name: 📥 Checkout Repository
+      uses: actions/checkout@v4
+      
+    - name: 🐳 Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: 🔑 Login to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: 📦 Extract Metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha
+          type=raw,value=latest,enable={{is_default_branch}}
+          
+    - name: 🏗️ Build and Push Production Image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile.ci
+        target: production
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+    - name: 📋 Deployment Summary
+      run: |
+        echo "### 🎉 Production Deployment Ready" >> $GITHUB_STEP_SUMMARY
+        echo "📦 Image: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest\`" >> $GITHUB_STEP_SUMMARY
+        echo "🐳 Ready for Unraid deployment" >> $GITHUB_STEP_SUMMARY
+        echo "🔧 Mount credentials to: \`/app/secrets/coinbase/\`" >> $GITHUB_STEP_SUMMARY
