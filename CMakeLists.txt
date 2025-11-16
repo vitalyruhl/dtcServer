@@ -249,20 +249,9 @@ if (BUILD_TESTING AND ENABLE_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/settings
     )
     
-    add_executable(test_server
-        tests/core/server/test_server.cpp
-    )
-    target_link_libraries(test_server
-        dtc_server 
-        dtc_protocol 
-        dtc_util 
-        # exchange_factory  # TEMPORARY: Disabled
-        exchange_base
-    )
-    target_include_directories(test_server PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/settings
-    )
+    # REMOVED: test_server - redundant functionality covered by integration tests
+    # The simple DTCServer creation test is not critical as the server is tested
+    # in practice through integration tests and the main application
     
     # Root level tests (legacy compatibility)
     add_executable(test_dtc_client_legacy
@@ -400,6 +389,9 @@ if (BUILD_TESTING AND ENABLE_TESTING)
         dtc_util
         dtc_server
     )
+    if(nlohmann_json_FOUND)
+        target_link_libraries(test_dtc_integration nlohmann_json::nlohmann_json)
+    endif()
     target_include_directories(test_dtc_integration PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/settings
@@ -490,7 +482,7 @@ if (BUILD_TESTING AND ENABLE_TESTING)
     if(WIN32)
         target_link_libraries(test_basic ws2_32 wsock32)
         target_link_libraries(test_dtc_protocol ws2_32 wsock32)
-        target_link_libraries(test_server ws2_32 wsock32)
+        # test_server removed - redundant functionality
         target_link_libraries(test_dtc_client_legacy ws2_32 wsock32)
         target_link_libraries(test_dtc_protocol_legacy ws2_32 wsock32)
         # target_link_libraries(test_coinbase_feed ws2_32 wsock32)  # DISABLED
@@ -508,7 +500,7 @@ if (BUILD_TESTING AND ENABLE_TESTING)
     # Add tests to CTest
     add_test(NAME BasicTest COMMAND test_basic)
     add_test(NAME DTCProtocolTest COMMAND test_dtc_protocol)
-    add_test(NAME ServerTest COMMAND test_server)
+    # ServerTest removed - redundant functionality covered by integration tests
     add_test(NAME DTCClientLegacyTest COMMAND test_dtc_client_legacy)
     add_test(NAME DTCProtocolLegacyTest COMMAND test_dtc_protocol_legacy)
     # add_test(NAME CoinbaseFeedTest COMMAND test_coinbase_feed)

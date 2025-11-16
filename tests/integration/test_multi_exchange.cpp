@@ -10,16 +10,16 @@ using namespace open_dtc_server;
 
 int main()
 {
-    util::log("[TEST] Starting Multi-Exchange Integration tests...");
+    std::cout << "[TEST] Starting Multi-Exchange Integration tests..." << std::endl;
 
     try
     {
-        util::log("[TEST] All Integration tests completed successfully! ✅");
+        std::cout << "[TEST] All Integration tests completed successfully! [SUCCESS]" << std::endl;
         return 0;
     }
     catch (const std::exception &e)
     {
-        util::log("[ERROR] Integration test failed: " + std::string(e.what()));
+        std::cout << "[ERROR] Integration test failed: " << e.what() << std::endl;
         return 1;
     }
 }

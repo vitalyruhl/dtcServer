@@ -92,7 +92,7 @@ public:
 
     bool send_logon_request(const std::string &username)
     {
-        using namespace coinbase_dtc_core::core::dtc;
+        using namespace open_dtc_server::core::dtc;
 
         LogonRequest logon_req;
         logon_req.username = username;
@@ -118,7 +118,7 @@ public:
 
     bool send_market_data_request(const std::string &symbol)
     {
-        using namespace coinbase_dtc_core::core::dtc;
+        using namespace open_dtc_server::core::dtc;
 
         MarketDataRequest md_req;
         md_req.request_action = RequestAction::SUBSCRIBE;
@@ -143,7 +143,7 @@ public:
 
     bool receive_and_verify_messages()
     {
-        using namespace coinbase_dtc_core::core::dtc;
+        using namespace open_dtc_server::core::dtc;
 
         Protocol protocol;
         std::vector<uint8_t> message_buffer;
