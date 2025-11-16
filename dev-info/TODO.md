@@ -1,5 +1,28 @@
 # TODO List - Coinbase DTC Core - UPDATED STATUS
 
+## 🚧 CURRENT PRIORITY - DTC Market Data Subscription Implementation
+
+### ❌ MISSING - Market Data Response & Real-time Updates  
+**Problem**: MarketDataRequest processing incomplete
+- **Issue 1**: Server receives MarketDataRequest but doesn't send MarketDataResponse  
+- **Issue 2**: No real-time WebSocket subscription with Coinbase for requested symbols
+- **Issue 3**: No MarketDataUpdateTrade/BidAsk messages sent to subscribed clients
+- **Issue 4**: Client subscription management exists but no actual data flow
+
+**Current Status**: 
+- ✅ MarketDataRequest received and processed
+- ✅ Client subscription tracking working  
+- ✅ DTC MarketDataUpdate message classes implemented
+- ❌ Missing MarketDataResponse acknowledgment
+- ❌ Missing Coinbase WebSocket subscription for specific symbols
+- ❌ Missing real-time data bridge: Coinbase WebSocket → DTC Messages
+
+**Implementation Needed**:
+1. Send MarketDataResponse after MarketDataRequest 
+2. Subscribe to Coinbase WebSocket for specific symbol
+3. Bridge Coinbase ticker data to DTC MarketDataUpdateTrade messages
+4. Send real-time updates to subscribed DTC clients
+
 ## ✅ COMPLETED - Full DTC Protocol & Coinbase Integration
 
 - [x] **DTC Protocol v8 Implementation** - ✅ COMPLETE bidirectional message communication
@@ -82,7 +105,8 @@
   - [ ] --> [coinbase-dtc-core] [WARNING] SSL_read failed: error:00000000:lib(0)::reason(0)
     - [ ] Fix SSL_read warning in test client during communication, add reconnection logic
 
-
+- [ ] fix error:C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\xutility(476,82): warning C4244: "Argument": Konvertierung von 
+"SOCKET" in "int", möglicher Datenverlust [C:\Daten\_Codding\coinbase-dtc-core\build\dtc_server.vcxproj]
 - [ ] Create complete test client that validates ALL DTC protocol functions
 - [ ] Test every DTC message type with real Coinbase data (not mock)
 - [ ] Verify protocol conformance for all implemented features

@@ -1,6 +1,10 @@
 # Compile Helpers
 
 ````bash
+
+#build all
+cmake --build build --config Release
+
 # Build server (full rebuild)
 cd C:\Daten\_Codding\coinbase-dtc-core\build; cmake --build . --config Release --target coinbase_dtc_server --clean-first
 

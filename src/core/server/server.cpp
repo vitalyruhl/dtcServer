@@ -704,7 +704,13 @@ namespace coinbase_dtc_core
                 {
                     auto *market_req = static_cast<open_dtc_server::core::dtc::MarketDataRequest *>(message.get());
 
-                    std::cout << "MarketDataRequest: " + std::string(market_req->request_action == open_dtc_server::core::dtc::RequestAction::SUBSCRIBE ? "SUBSCRIBE" : "UNSUBSCRIBE") + " to " + market_req->symbol + " on " + market_req->exchange << std::endl;
+                    std::cout << "[DTC-SERVER] *** MarketDataRequest RECEIVED ***" << std::endl;
+                    std::cout << "[DTC-SERVER] Action: " << (market_req->request_action == open_dtc_server::core::dtc::RequestAction::SUBSCRIBE ? "SUBSCRIBE" : "UNSUBSCRIBE") << std::endl;
+                    std::cout << "[DTC-SERVER] Symbol: '" << market_req->symbol << "'" << std::endl;
+                    std::cout << "[DTC-SERVER] Exchange: '" << market_req->exchange << "'" << std::endl;
+                    std::cout << "[DTC-SERVER] Symbol ID: " << market_req->symbol_id << std::endl;
+
+                    bool success = false;
 
                     // Add symbol to client's subscription list
                     if (market_req->request_action == open_dtc_server::core::dtc::RequestAction::SUBSCRIBE)
@@ -726,11 +732,11 @@ namespace coinbase_dtc_core
                             subscriptions.push_back(market_req->symbol);
                         }
 
-                        bool client_subscription = true;
-                        if (client_subscription)
-                        {
-                            std::cout << "[SUCCESS] Client " + std::to_string(client->get_client_id()) + " subscribed to " + market_req->symbol + " (ID: " + std::to_string(market_req->symbol_id) + ")" << std::endl;
-                        }
+                        std::cout << "[DTC-SERVER] *** SUBSCRIPTION SUCCESS *** Client " << client->get_client_id() << " subscribed to " << market_req->symbol << " (ID: " << market_req->symbol_id << ")" << std::endl;
+                        success = true;
+
+                        // TODO: Subscribe to Coinbase WebSocket for this specific symbol
+                        std::cout << "[TODO] Subscribe to Coinbase WebSocket for " << market_req->symbol << std::endl;
                     }
                     else if (market_req->request_action == open_dtc_server::core::dtc::RequestAction::UNSUBSCRIBE)
                     {
@@ -738,12 +744,21 @@ namespace coinbase_dtc_core
                         auto &subscriptions = client->get_session().subscribed_symbols;
                         subscriptions.erase(std::remove(subscriptions.begin(), subscriptions.end(), market_req->symbol), subscriptions.end());
 
-                        bool client_unsubscription = true;
-                        if (client_unsubscription)
-                        {
-                            std::cout << "[INFO] Client " + std::to_string(client->get_client_id()) + " unsubscribed from " + market_req->symbol << std::endl;
-                        }
+                        std::cout << "[DTC-SERVER] Client " << client->get_client_id() << " unsubscribed from " << market_req->symbol << std::endl;
+                        success = true;
+
+                        // TODO: Unsubscribe from Coinbase WebSocket for this symbol
+                        std::cout << "[TODO] Unsubscribe from Coinbase WebSocket for " << market_req->symbol << std::endl;
                     }
+
+                    // Send MarketDataResponse
+                    auto market_response = protocol.create_market_data_response(
+                        market_req->symbol_id, market_req->symbol, market_req->exchange, success);
+
+                    auto response_data = protocol.create_message(*market_response);
+                    client->send_message(response_data);
+
+                    std::cout << "[DTC-SERVER] *** MarketDataResponse SENT *** Result: " << (success ? "SUCCESS" : "FAILURE") << std::endl;
                     break;
                 }
 

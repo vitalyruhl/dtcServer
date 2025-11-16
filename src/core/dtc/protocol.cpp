@@ -77,7 +77,10 @@ namespace open_dtc_server
 
             uint16_t MarketDataRequest::get_size() const
             {
-                return sizeof(MessageHeader) + 50;
+                return sizeof(MessageHeader) + sizeof(uint16_t) + // request_action
+                       sizeof(uint16_t) +                         // symbol_id
+                       symbol.length() + 1 +                      // symbol + null terminator
+                       exchange.length() + 1;                     // exchange + null terminator
             }
 
             std::vector<uint8_t> MarketDataRequest::serialize() const
@@ -85,12 +88,155 @@ namespace open_dtc_server
                 std::vector<uint8_t> buffer(get_size());
                 MessageHeader header(get_size(), get_type());
                 std::memcpy(buffer.data(), &header, sizeof(MessageHeader));
+
+                uint8_t *ptr = buffer.data() + sizeof(MessageHeader);
+
+                // Write request_action
+                uint16_t action = static_cast<uint16_t>(request_action);
+                std::memcpy(ptr, &action, sizeof(uint16_t));
+                ptr += sizeof(uint16_t);
+
+                // Write symbol_id
+                std::memcpy(ptr, &symbol_id, sizeof(uint16_t));
+                ptr += sizeof(uint16_t);
+
+                // Write symbol (null-terminated)
+                std::memcpy(ptr, symbol.c_str(), symbol.length() + 1);
+                ptr += symbol.length() + 1;
+
+                // Write exchange (null-terminated)
+                std::memcpy(ptr, exchange.c_str(), exchange.length() + 1);
+
                 return buffer;
             }
 
             bool MarketDataRequest::deserialize(const uint8_t *data, uint16_t size)
             {
-                return size >= sizeof(MessageHeader);
+                if (size < sizeof(MessageHeader) + sizeof(uint16_t) * 2)
+                {
+                    return false;
+                }
+
+                // Skip message header
+                const uint8_t *ptr = data + sizeof(MessageHeader);
+                size_t remaining = size - sizeof(MessageHeader);
+
+                // Read request_action
+                if (remaining < sizeof(uint16_t))
+                    return false;
+                uint16_t action;
+                std::memcpy(&action, ptr, sizeof(uint16_t));
+                request_action = static_cast<RequestAction>(action);
+                ptr += sizeof(uint16_t);
+                remaining -= sizeof(uint16_t);
+
+                // Read symbol_id
+                if (remaining < sizeof(uint16_t))
+                    return false;
+                std::memcpy(&symbol_id, ptr, sizeof(uint16_t));
+                ptr += sizeof(uint16_t);
+                remaining -= sizeof(uint16_t);
+
+                // Read symbol (null-terminated string)
+                const char *symbol_start = reinterpret_cast<const char *>(ptr);
+                size_t symbol_len = strnlen(symbol_start, remaining);
+                if (symbol_len == remaining)
+                    return false; // No null terminator found
+                symbol.assign(symbol_start, symbol_len);
+                ptr += symbol_len + 1;
+                remaining -= symbol_len + 1;
+
+                // Read exchange (null-terminated string)
+                if (remaining == 0)
+                    return false;
+                const char *exchange_start = reinterpret_cast<const char *>(ptr);
+                size_t exchange_len = strnlen(exchange_start, remaining);
+                if (exchange_len == remaining)
+                    return false;
+                exchange.assign(exchange_start, exchange_len);
+
+                return true;
+            }
+
+            // MarketDataResponse implementation
+            uint16_t MarketDataResponse::get_size() const
+            {
+                return sizeof(MessageHeader) + sizeof(uint16_t) + // symbol_id
+                       symbol.length() + 1 +                      // symbol + null terminator
+                       exchange.length() + 1 +                    // exchange + null terminator
+                       sizeof(uint8_t);                           // result
+            }
+
+            std::vector<uint8_t> MarketDataResponse::serialize() const
+            {
+                std::vector<uint8_t> buffer(get_size());
+                MessageHeader header(get_size(), get_type());
+                std::memcpy(buffer.data(), &header, sizeof(MessageHeader));
+
+                uint8_t *ptr = buffer.data() + sizeof(MessageHeader);
+
+                // Write symbol_id
+                std::memcpy(ptr, &symbol_id, sizeof(uint16_t));
+                ptr += sizeof(uint16_t);
+
+                // Write symbol (null-terminated)
+                std::memcpy(ptr, symbol.c_str(), symbol.length() + 1);
+                ptr += symbol.length() + 1;
+
+                // Write exchange (null-terminated)
+                std::memcpy(ptr, exchange.c_str(), exchange.length() + 1);
+                ptr += exchange.length() + 1;
+
+                // Write result
+                std::memcpy(ptr, &result, sizeof(uint8_t));
+
+                return buffer;
+            }
+
+            bool MarketDataResponse::deserialize(const uint8_t *data, uint16_t size)
+            {
+                if (size < sizeof(MessageHeader) + sizeof(uint16_t) + sizeof(uint8_t))
+                {
+                    return false;
+                }
+
+                // Skip message header
+                const uint8_t *ptr = data + sizeof(MessageHeader);
+                size_t remaining = size - sizeof(MessageHeader);
+
+                // Read symbol_id
+                if (remaining < sizeof(uint16_t))
+                    return false;
+                std::memcpy(&symbol_id, ptr, sizeof(uint16_t));
+                ptr += sizeof(uint16_t);
+                remaining -= sizeof(uint16_t);
+
+                // Read symbol (null-terminated string)
+                const char *symbol_start = reinterpret_cast<const char *>(ptr);
+                size_t symbol_len = strnlen(symbol_start, remaining);
+                if (symbol_len == remaining)
+                    return false; // No null terminator found
+                symbol.assign(symbol_start, symbol_len);
+                ptr += symbol_len + 1;
+                remaining -= symbol_len + 1;
+
+                // Read exchange (null-terminated string)
+                if (remaining == 0)
+                    return false;
+                const char *exchange_start = reinterpret_cast<const char *>(ptr);
+                size_t exchange_len = strnlen(exchange_start, remaining);
+                if (exchange_len == remaining)
+                    return false;
+                exchange.assign(exchange_start, exchange_len);
+                ptr += exchange_len + 1;
+                remaining -= exchange_len + 1;
+
+                // Read result
+                if (remaining < sizeof(uint8_t))
+                    return false;
+                std::memcpy(&result, ptr, sizeof(uint8_t));
+
+                return true;
             }
 
             uint16_t MarketDataUpdateTrade::get_size() const
@@ -418,6 +564,15 @@ namespace open_dtc_server
                     }
                     break;
                 }
+                case MessageType::MARKET_DATA_RESPONSE:
+                {
+                    auto msg = std::make_unique<MarketDataResponse>();
+                    if (msg->deserialize(data, header->size))
+                    {
+                        return std::move(msg);
+                    }
+                    break;
+                }
                 case MessageType::MARKET_DATA_UPDATE_TRADE:
                 {
                     auto msg = std::make_unique<MarketDataUpdateTrade>();
@@ -476,6 +631,28 @@ namespace open_dtc_server
                 auto response = std::make_unique<LogonResponse>();
                 response->result = success ? 1 : 0;
                 response->result_text = message;
+                return response;
+            }
+
+            std::unique_ptr<MarketDataRequest> Protocol::create_market_data_request(
+                RequestAction action, uint16_t symbol_id, const std::string &symbol, const std::string &exchange)
+            {
+                auto request = std::make_unique<MarketDataRequest>();
+                request->request_action = action;
+                request->symbol_id = symbol_id;
+                request->symbol = symbol;
+                request->exchange = exchange;
+                return request;
+            }
+
+            std::unique_ptr<MarketDataResponse> Protocol::create_market_data_response(
+                uint16_t symbol_id, const std::string &symbol, const std::string &exchange, bool success)
+            {
+                auto response = std::make_unique<MarketDataResponse>();
+                response->symbol_id = symbol_id;
+                response->symbol = symbol;
+                response->exchange = exchange;
+                response->result = success ? 1 : 0;
                 return response;
             }
 
@@ -578,6 +755,8 @@ namespace open_dtc_server
                     return "LOGOFF";
                 case MessageType::MARKET_DATA_REQUEST:
                     return "MARKET_DATA_REQUEST";
+                case MessageType::MARKET_DATA_RESPONSE:
+                    return "MARKET_DATA_RESPONSE";
                 case MessageType::MARKET_DATA_REJECT:
                     return "MARKET_DATA_REJECT";
                 case MessageType::MARKET_DATA_UPDATE_TRADE:

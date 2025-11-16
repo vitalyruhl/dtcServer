@@ -28,6 +28,7 @@ namespace open_dtc_server
 
                 // Market Data Messages
                 MARKET_DATA_REQUEST = 101,
+                MARKET_DATA_RESPONSE = 102,
                 MARKET_DATA_REJECT = 103,
                 MARKET_DATA_SNAPSHOT = 104,
                 MARKET_DATA_UPDATE_TRADE = 107,
@@ -243,6 +244,21 @@ namespace open_dtc_server
                 std::string exchange;
 
                 MessageType get_type() const override { return MessageType::MARKET_DATA_REQUEST; }
+                uint16_t get_size() const override;
+                std::vector<uint8_t> serialize() const override;
+                bool deserialize(const uint8_t *data, uint16_t size) override;
+            };
+
+            // Market Data Response Message
+            class MarketDataResponse : public DTCMessage
+            {
+            public:
+                uint16_t symbol_id = 0;
+                std::string symbol;
+                std::string exchange;
+                uint8_t result = 1; // 1 = success, 0 = failure
+
+                MessageType get_type() const override { return MessageType::MARKET_DATA_RESPONSE; }
                 uint16_t get_size() const override;
                 std::vector<uint8_t> serialize() const override;
                 bool deserialize(const uint8_t *data, uint16_t size) override;
@@ -478,6 +494,10 @@ namespace open_dtc_server
 
                 // Protocol helpers - factory methods for common messages
                 std::unique_ptr<LogonResponse> create_logon_response(bool success, const std::string &message = "");
+                std::unique_ptr<MarketDataRequest> create_market_data_request(
+                    RequestAction action, uint16_t symbol_id, const std::string &symbol, const std::string &exchange);
+                std::unique_ptr<MarketDataResponse> create_market_data_response(
+                    uint16_t symbol_id, const std::string &symbol, const std::string &exchange, bool success);
                 std::unique_ptr<MarketDataUpdateTrade> create_trade_update(
                     uint16_t symbol_id, double price, double volume, uint64_t timestamp);
                 std::unique_ptr<MarketDataUpdateBidAsk> create_bid_ask_update(
