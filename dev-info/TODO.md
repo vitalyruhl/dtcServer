@@ -264,6 +264,8 @@
 - **Success**: GUI client successfully connects and communicates with server
 - **Foundation**: Complete build system and development environment
 - **Clarity**: All mock data clearly labeled to prevent confusion
+- **Testing**: Logger diagnostics migrated into `tests/core/util` with CTest coverage (simple + initialization checks)
+- **Security**: Coinbase JWT authentication test cleaned up, re-enabled, and now part of the automated test suite when libcurl is present
 
 ---
 

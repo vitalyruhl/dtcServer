@@ -1,18 +1,16 @@
 #include "coinbase_dtc_core/core/auth/jwt_auth.hpp"
-#include "coinbase_dtc_core/endpoints/endpoint.hpp"
+#include "coinbase_dtc_core/exchanges/coinbase/endpoint.hpp"
 
 #ifdef HAS_LIBCURL
 #include <curl/curl.h>
 #endif
 
+#include <cstdlib>
 #include <iostream>
 #include <string>
-#include <cstdlib>
 
-// Simple HTTP client for testing (reuse from advanced_trade_api test)
 namespace test
 {
-
     struct HttpResponse
     {
         bool success = false;
@@ -27,7 +25,7 @@ namespace test
 #ifdef HAS_LIBCURL
         static size_t WriteCallback(void *contents, size_t size, size_t nmemb, std::string *userp)
         {
-            userp->append((char *)contents, size * nmemb);
+            userp->append(static_cast<char *>(contents), size * nmemb);
             return size * nmemb;
         }
 
@@ -42,8 +40,7 @@ namespace test
                 return response;
             }
 
-            // Set headers
-            struct curl_slist *headers = nullptr;
+            curl_slist *headers = nullptr;
             std::string auth_header = "Authorization: " + auth_token;
             headers = curl_slist_append(headers, auth_header.c_str());
             headers = curl_slist_append(headers, "Content-Type: application/json");
@@ -54,7 +51,7 @@ namespace test
             curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
             curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
 
-            CURLcode res = curl_easy_perform(curl);
+            const CURLcode res = curl_easy_perform(curl);
 
             if (res == CURLE_OK)
             {
@@ -72,7 +69,7 @@ namespace test
             return response;
         }
 #else
-        static HttpResponse get_with_auth(const std::string &url, const std::string &auth_token)
+        static HttpResponse get_with_auth(const std::string &, const std::string &)
         {
             HttpResponse response;
             response.error = "libcurl not available";
@@ -94,142 +91,137 @@ namespace test
 
 int main()
 {
-    std::cout << "🔐 Testing JWT Authentication for Coinbase CDP API..." << std::endl;
-    std::cout << "   HTTP client: " << test::AuthenticatedHttpClient::get_client_type() << std::endl;
-    std::cout << "" << std::endl;
+    std::cout << "[INFO] Testing JWT Authentication for Coinbase CDP API..." << std::endl;
+    std::cout << "[INFO] HTTP client: " << test::AuthenticatedHttpClient::get_client_type() << std::endl;
 
-    // Declare credentials outside try block for later use
     open_dtc_server::auth::CDPCredentials env_creds;
 
     try
     {
-        // Test 1: Load credentials from environment
-        std::cout << "📋 Testing credential loading..." << std::endl;
+        std::cout << "[INFO] Testing credential loading..." << std::endl;
 
         env_creds = open_dtc_server::auth::CDPCredentials::from_environment();
         if (env_creds.is_valid())
         {
-            std::cout << "✅ Loaded credentials from environment variables" << std::endl;
+            std::cout << "[SUCCESS] Loaded credentials from environment variables" << std::endl;
             std::cout << "   Key ID: " << env_creds.key_id << std::endl;
-            std::cout << "   Private key: " << (env_creds.private_key.length() > 0 ? "[PRESENT]" : "[MISSING]") << std::endl;
+            std::cout << "   Private key: " << (env_creds.private_key.empty() ? "[MISSING]" : "[PRESENT]") << std::endl;
         }
         else
         {
-            std::cout << "⚠️  No valid credentials found in environment variables" << std::endl;
+            std::cout << "[WARNING] No valid credentials found in environment variables" << std::endl;
             std::cout << "   Expected: CDP_API_KEY_ID and CDP_PRIVATE_KEY" << std::endl;
         }
 
-        // Test 2: Try to load from JSON file
         try
         {
-            // Try ECDSA key first (current/recommended)
             auto file_creds = open_dtc_server::auth::CDPCredentials::from_json_file("secrets/cdp_api_key_ECDSA.json");
             if (file_creds.is_valid())
             {
-                std::cout << "✅ Loaded ECDSA credentials from JSON file" << std::endl;
+                std::cout << "[SUCCESS] Loaded ECDSA credentials from JSON file" << std::endl;
                 std::cout << "   Key ID: " << file_creds.key_id << std::endl;
-                std::cout << "   Private key: " << (file_creds.private_key.length() > 0 ? "[PRESENT]" : "[MISSING]") << std::endl;
-                env_creds = file_creds; // Use ECDSA credentials
+                std::cout << "   Private key: " << (file_creds.private_key.empty() ? "[MISSING]" : "[PRESENT]") << std::endl;
+                env_creds = file_creds;
             }
         }
         catch (const std::exception &e1)
         {
-            std::cout << "ℹ️  Could not load ECDSA key: " << e1.what() << std::endl;
+            std::cout << "[INFO] Could not load ECDSA key: " << e1.what() << std::endl;
 
-            // Fallback to default path (legacy/Ed25519 key)
             try
             {
                 auto file_creds = open_dtc_server::auth::CDPCredentials::from_json_file("secrets/cdp_api_key.json");
                 if (file_creds.is_valid())
                 {
-                    std::cout << "⚠️  Loaded legacy credentials (may not work with Advanced Trade)" << std::endl;
+                    std::cout << "[WARNING] Loaded legacy credentials (may not work with Advanced Trade)" << std::endl;
                     std::cout << "   Key ID: " << file_creds.key_id << std::endl;
-                    std::cout << "   Private key: " << (file_creds.private_key.length() > 0 ? "[PRESENT]" : "[MISSING]") << std::endl;
+                    std::cout << "   Private key: " << (file_creds.private_key.empty() ? "[MISSING]" : "[PRESENT]") << std::endl;
                     env_creds = file_creds;
                 }
             }
             catch (const std::exception &e2)
             {
-                std::cout << "ℹ️  No valid credentials found in JSON files" << std::endl;
+                std::cout << "[INFO] No valid credentials found in JSON files" << std::endl;
                 std::cout << "   Expected: secrets/cdp_api_key_ECDSA.json (preferred)" << std::endl;
                 std::cout << "   Fallback: secrets/cdp_api_key.json (legacy)" << std::endl;
                 std::cout << "   Template: secrets/cdp_api_key.json.template" << std::endl;
+                std::cout << "   Details: " << e2.what() << std::endl;
             }
         }
 
-        // Test 3: JWT Token Generation
         if (env_creds.is_valid())
         {
-            std::cout << "\n🔑 Testing JWT token generation..." << std::endl;
+            std::cout << std::endl;
+            std::cout << "[INFO] Testing JWT token generation..." << std::endl;
 
             open_dtc_server::auth::JWTAuthenticator authenticator(env_creds);
+            const std::string token = authenticator.generate_token("GET", "/accounts", "");
 
-            std::string token = authenticator.generate_token("GET", "/accounts", "");
-            std::cout << "✅ Generated JWT token" << std::endl;
+            std::cout << "[SUCCESS] Generated JWT token" << std::endl;
             std::cout << "   Token length: " << token.length() << " characters" << std::endl;
             std::cout << "   Token preview: " << token.substr(0, 50) << "..." << std::endl;
 
-            // Test 4: Make authenticated API request
-            std::cout << "\n🌐 Testing authenticated API request..." << std::endl;
+            std::cout << std::endl;
+            std::cout << "[INFO] Testing authenticated API request..." << std::endl;
 
             using namespace open_dtc_server::endpoints;
-            std::string accounts_url = make_url(TRADE_BASE, "accounts");
-            std::string auth_header = open_dtc_server::auth::jwt_utils::make_auth_header(token);
+            const std::string accounts_url = make_url(TRADE_BASE, "accounts");
+            const std::string auth_header = open_dtc_server::auth::jwt_utils::make_auth_header(token);
 
-            std::cout << "Making authenticated request to: " << accounts_url << std::endl;
-            auto response = test::AuthenticatedHttpClient::get_with_auth(accounts_url, auth_header);
+            std::cout << "[INFO] Making authenticated request to: " << accounts_url << std::endl;
+            const auto response = test::AuthenticatedHttpClient::get_with_auth(accounts_url, auth_header);
 
             if (response.success)
             {
-                std::cout << "✅ Authenticated request successful!" << std::endl;
+                std::cout << "[SUCCESS] Authenticated request completed" << std::endl;
                 std::cout << "   Status: " << response.status_code << std::endl;
                 std::cout << "   Response length: " << response.body.length() << " bytes" << std::endl;
-                std::cout << "   Response body: " << response.body << std::endl;
 
                 if (response.status_code == 200)
                 {
-                    std::cout << "✅ Authentication working - got account data!" << std::endl;
-                    std::cout << "   First 200 chars: " << response.body.substr(0, 200) << "..." << std::endl;
+                    std::cout << "[SUCCESS] Authentication working - received account data" << std::endl;
+                    std::cout << "   Preview: " << response.body.substr(0, 200) << "..." << std::endl;
                 }
                 else if (response.status_code == 401)
                 {
-                    std::cout << "❌ Authentication failed - this could mean:" << std::endl;
-                    std::cout << "   - New API key needs a few minutes to activate" << std::endl;
-                    std::cout << "   - Wrong environment (sandbox vs production)" << std::endl;
-                    std::cout << "   - Missing permissions for /accounts endpoint" << std::endl;
-                    std::cout << "   - Key restrictions (IP allowlist, etc.)" << std::endl;
+                    std::cout << "[ERROR] Authentication failed (401)" << std::endl;
+                    std::cout << "   Possible causes:" << std::endl;
+                    std::cout << "   - Newly created API key not yet active" << std::endl;
+                    std::cout << "   - Environment mismatch (sandbox vs production)" << std::endl;
+                    std::cout << "   - Missing permissions for /accounts" << std::endl;
+                    std::cout << "   - Key restrictions such as IP allowlists" << std::endl;
                 }
                 else
                 {
-                    std::cout << "⚠️  Unexpected status code: " << response.status_code << std::endl;
+                    std::cout << "[WARNING] Unexpected status code: " << response.status_code << std::endl;
                 }
             }
             else
             {
-                std::cout << "❌ Request failed: " << response.error << std::endl;
+                std::cout << "[ERROR] Request failed: " << response.error << std::endl;
             }
         }
         else
         {
-            std::cout << "\n⚠️  Skipping JWT tests - no valid credentials available" << std::endl;
-            std::cout << "   To test JWT authentication, provide credentials via:" << std::endl;
-            std::cout << "   1. Environment variables: CDP_API_KEY_ID, CDP_PRIVATE_KEY" << std::endl;
-            std::cout << "   2. JSON file: secrets/cdp_api_key.json" << std::endl;
+            std::cout << std::endl;
+            std::cout << "[WARNING] Skipping JWT token and HTTP tests - no valid credentials" << std::endl;
+            std::cout << "   Provide credentials via environment variables or secrets/cdp_api_key_ECDSA.json" << std::endl;
         }
     }
-    catch (const std::exception &e)
+    catch (const std::exception &ex)
     {
-        std::cout << "❌ JWT test failed with exception: " << e.what() << std::endl;
+        std::cout << "[ERROR] JWT test failed with exception: " << ex.what() << std::endl;
         return 1;
     }
 
-    std::cout << "\n🎯 JWT Authentication Test Summary:" << std::endl;
-    std::cout << "   - Credential loading: implemented and tested" << std::endl;
-    std::cout << "   - JWT token generation: " << (env_creds.is_valid() ? "working" : "needs credentials") << std::endl;
-    std::cout << "   - API authentication: " << (env_creds.is_valid() ? "tested" : "needs credentials") << std::endl;
-    std::cout << "   - Ready for integration with HTTP client" << std::endl;
+    std::cout << std::endl;
+    std::cout << "[INFO] JWT Authentication Test Summary" << std::endl;
+    std::cout << "   - Credential loading: completed" << std::endl;
+    std::cout << "   - JWT token generation: " << (env_creds.is_valid() ? "executed" : "skipped (missing credentials)") << std::endl;
+    std::cout << "   - API authentication: " << (env_creds.is_valid() ? "executed" : "skipped") << std::endl;
 
-    std::cout << "\n🔐 JWT Authentication test completed!" << std::endl;
+    std::cout << std::endl;
+    std::cout << "[SUCCESS] JWT authentication test routine finished" << std::endl;
 
     return 0;
 }
