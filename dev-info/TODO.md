@@ -266,6 +266,7 @@
 - **Clarity**: All mock data clearly labeled to prevent confusion
 - **Testing**: Logger diagnostics migrated into `tests/core/util` with CTest coverage (simple + initialization checks)
 - **Security**: Coinbase JWT authentication test cleaned up, re-enabled, and now part of the automated test suite when libcurl is present
+- **Logging**: Advanced logger now auto-creates log directories, supports config-driven rotation on startup/size limits, and is fully documented in README
 
 ---
 

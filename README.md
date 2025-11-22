@@ -204,6 +204,14 @@ secrets/cdp_api_key.json
 - **🔄 Multiple Formats**: Legacy and CDP authentication support
 - **⚡ JWT Working**: ES256/ECDSA authentication for Advanced Trade API
 
+## 🧾 Logging & Diagnostics
+
+- **Centralized Logger**: All server components now route through `open_dtc_server::util::Logger`, exposing `LOG_INFO`, `LOG_WARN`, etc. for consistent diagnostics.
+- **Config-Driven Behavior**: `config/logging.ini` (and `config/logging_new.ini` template) control log profile, directory, rotation thresholds, and console behavior. The logger automatically creates the directory if missing.
+- **File Rotation & Size Guards**: Logs rotate on startup or whenever the configured size limit is exceeded, retaining the configured number of backups.
+- **Cross-Platform Friendly**: Logger configuration and auto-creation work on Windows and Linux builds (including Docker CI). Windows-only linker flags were isolated so Linux builds stay clean.
+- **Helper Scripts**: `tools/start_server*.cmd` copy logging config + credentials into build outputs to ensure consistent startup logging on Windows.
+
 ## 🎯 Roadmap & Next Steps
 
 ### Phase 1: Core Infrastructure ✅ **COMPLETE**

@@ -102,7 +102,7 @@ target_include_directories(dtc_protocol PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-target_include_directories(dtc_util INTERFACE
+target_include_directories(dtc_util PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
@@ -303,10 +303,14 @@ if(CURL_FOUND)
         dtc_auth
         dtc_util
         CURL::libcurl
-        winhttp
-        ws2_32
-        crypt32
     )
+    if(WIN32)
+        target_link_libraries(test_coinbase_account_info
+            winhttp
+            ws2_32
+            crypt32
+        )
+    endif()
     if(nlohmann_json_FOUND)
         target_link_libraries(test_coinbase_account_info nlohmann_json::nlohmann_json)
     endif()
@@ -323,10 +327,14 @@ if(CURL_FOUND)
         dtc_auth
         dtc_util
         CURL::libcurl
-        winhttp
-        ws2_32
-        crypt32
     )
+    if(WIN32)
+        target_link_libraries(test_coinbase_endpoints
+            winhttp
+            ws2_32
+            crypt32
+        )
+    endif()
     target_include_directories(test_coinbase_endpoints PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/settings
@@ -339,10 +347,14 @@ if(CURL_FOUND)
         dtc_auth
         dtc_util
         CURL::libcurl
-        winhttp
-        ws2_32
-        crypt32
     )
+    if(WIN32)
+        target_link_libraries(test_jwt_auth
+            winhttp
+            ws2_32
+            crypt32
+        )
+    endif()
     target_include_directories(test_jwt_auth PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/settings
