@@ -1,5 +1,6 @@
 #include "coinbase_dtc_core/core/server/server.hpp"
 #include "coinbase_dtc_core/core/util/log.hpp"
+#include "coinbase_dtc_core/core/util/advanced_log.hpp"
 #include "coinbase_dtc_core/exchanges/base/exchange_feed.hpp"
 #include <iostream>
 #include <chrono>
@@ -13,7 +14,7 @@ void signal_handler(int signal)
 {
     if (g_server)
     {
-        open_dtc_server::util::simple_log("Received shutdown signal, stopping server...");
+        LOG_INFO("Received shutdown signal, stopping server...");
         g_server->stop();
     }
 }
@@ -24,6 +25,8 @@ int main(int argc, char *argv[])
 
     // Parse command line arguments
     std::string credentials_path = "cdp_api_key.json"; // Default path
+    std::string log_level = "advanced";                // Default log level
+    std::string log_config = "config/logging.ini";     // Default config path
 
     for (int i = 1; i < argc; i++)
     {
@@ -33,20 +36,62 @@ int main(int argc, char *argv[])
             credentials_path = argv[i + 1];
             i++; // Skip next argument as it's the path
         }
+        else if (arg == "--loglevel" && i + 1 < argc)
+        {
+            log_level = argv[i + 1];
+            i++; // Skip next argument as it's the level
+        }
+        else if (arg == "--logconfig" && i + 1 < argc)
+        {
+            log_config = argv[i + 1];
+            i++; // Skip next argument as it's the config path
+        }
         else if (arg == "--help" || arg == "-h")
         {
             std::cout << "Usage: " << argv[0] << " [options]\n";
             std::cout << "Options:\n";
-            std::cout << "  --credentials <path>  Path to CDP API credentials file\n";
-            std::cout << "  --help, -h           Show this help message\n";
+            std::cout << "  --credentials <path>     Path to CDP API credentials file\n";
+            std::cout << "  --loglevel <level>       Log level: std, advanced, verbose (default: advanced)\n";
+            std::cout << "  --logconfig <path>       Path to logging configuration file (default: config/logging.ini)\n";
+            std::cout << "  --help, -h              Show this help message\n";
+            std::cout << "\nLog Levels:\n";
+            std::cout << "  std        - Only errors and critical messages\n";
+            std::cout << "  advanced   - Info, warnings, errors (default)\n";
+            std::cout << "  verbose    - Everything including debug and trace\n";
             return 0;
         }
     }
 
-    // Set log level to WARNING to reduce verbose output
-    // open_dtc_server::util::set_log_level(open_dtc_server::util::LogLevel::WARNING);
+    // Initialize advanced logging system
+    auto &logger = open_dtc_server::util::Logger::getInstance();
+    if (!logger.initialize(log_config))
+    {
+        std::cerr << "Warning: Could not load logging config, using defaults" << std::endl;
+    }
 
-    open_dtc_server::util::simple_log("[START] CoinbaseDTC Server Starting...");
+    // Set log level from command line
+    if (log_level == "std")
+    {
+        logger.setLogProfile(open_dtc_server::util::LogProfile::STD);
+    }
+    else if (log_level == "advanced")
+    {
+        logger.setLogProfile(open_dtc_server::util::LogProfile::ADVANCED);
+    }
+    else if (log_level == "verbose")
+    {
+        logger.setLogProfile(open_dtc_server::util::LogProfile::VERBOSE);
+    }
+    else
+    {
+        LOG_WARNING("Unknown log level '" + log_level + "', using 'advanced'");
+        logger.setLogProfile(open_dtc_server::util::LogProfile::ADVANCED);
+    }
+
+    LOG_INFO("=== DTC SERVER STARTUP ===");
+    LOG_INFO("Credentials file: " + credentials_path);
+    LOG_INFO("Log level: " + log_level);
+    LOG_INFO("Log config: " + log_config);
 
     if (credentials_path != "cdp_api_key.json")
     {

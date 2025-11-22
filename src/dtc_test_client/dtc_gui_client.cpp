@@ -265,9 +265,18 @@ void DTCTestClientGUI::OnCreate(HWND hwnd)
     CreateWindowA("STATIC", "Account Information:", WS_VISIBLE | WS_CHILD,
                   account_info_x, y - 25, 150, 20, hwnd, nullptr, m_hInstance, nullptr);
 
-    m_editAccountInfo = CreateWindowA("EDIT", "Not connected\r\n\r\nConnect to server to see account information",
+    m_editAccountInfo = CreateWindowA("EDIT", "Not connected\\r\\n\\r\\nConnect to server to see account information",
                                       WS_VISIBLE | WS_CHILD | WS_BORDER | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY,
                                       account_info_x, y, console_width, 200, hwnd, (HMENU)ID_EDIT_ACCOUNT_INFO, m_hInstance, nullptr);
+
+    // Market Data Panel
+    int market_data_y = y + 210; // Below account info
+    CreateWindowA("STATIC", "Live Market Data:", WS_VISIBLE | WS_CHILD,
+                  x, market_data_y - 25, 150, 20, hwnd, nullptr, m_hInstance, nullptr);
+
+    m_editMarketData = CreateWindowA("EDIT", "No market data subscription\\r\\n\\r\\nSelect a symbol and click 'Subscribe' to see live data",
+                                     WS_VISIBLE | WS_CHILD | WS_BORDER | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY,
+                                     x, market_data_y, console_width, 150, hwnd, (HMENU)ID_EDIT_MARKET_DATA, m_hInstance, nullptr);
 
     // Status bar
     m_statusBar = CreateWindowA("msctls_statusbar32", "Ready",
@@ -578,11 +587,37 @@ void DTCTestClientGUI::SubscribeToSymbol()
         return;
     }
 
-    UpdateConsole("Subscribing to real-time data for: " + symbol);
+    UpdateConsole("Subscribing to real-time market data for: " + symbol);
 
-    // TODO: Implement actual DTC subscription request
-    UpdateConsole("Subscribed to " + symbol);
-    UpdateConsole("You will now receive real-time updates for this symbol");
+    try
+    {
+        // Create MarketDataRequest for subscription
+        open_dtc_server::core::dtc::Protocol protocol_handler;
+        auto market_data_request = protocol_handler.create_market_data_request(
+            open_dtc_server::core::dtc::RequestAction::SUBSCRIBE, 0, symbol, "COINBASE");
+
+        // Create the DTC message
+        auto request_data = protocol_handler.create_message(*market_data_request);
+
+        // Send to server
+        if (SendDTCMessage(request_data))
+        {
+            UpdateConsole("MarketDataRequest sent for " + symbol);
+            UpdateConsole("Waiting for live market data...");
+
+            // Update market data display to show subscription status
+            SetWindowTextA(m_editMarketData,
+                           ("Subscribing to " + symbol + "...\r\n\r\nWaiting for live market data from server.\r\n\r\nStatus: SUBSCRIBING").c_str());
+        }
+        else
+        {
+            UpdateConsole("Failed to send MarketDataRequest");
+        }
+    }
+    catch (const std::exception &e)
+    {
+        UpdateConsole("Error creating MarketDataRequest: " + std::string(e.what()));
+    }
 }
 
 void DTCTestClientGUI::UnsubscribeFromSymbol()
@@ -602,8 +637,37 @@ void DTCTestClientGUI::UnsubscribeFromSymbol()
 
     UpdateConsole("Unsubscribing from: " + symbol);
 
-    // TODO: Implement actual DTC unsubscribe request
-    UpdateConsole("Unsubscribed from " + symbol);
+    try
+    {
+        // Create MarketDataRequest for unsubscription
+        open_dtc_server::core::dtc::Protocol protocol_handler;
+        auto market_data_request = protocol_handler.create_market_data_request(
+            open_dtc_server::core::dtc::RequestAction::UNSUBSCRIBE, 0, symbol, "COINBASE");
+
+        // Create the DTC message
+        auto request_data = protocol_handler.create_message(*market_data_request);
+
+        // Send to server
+        if (SendDTCMessage(request_data))
+        {
+            UpdateConsole("MarketDataRequest (unsubscribe) sent for " + symbol);
+
+            // Clear market data display
+            SetWindowTextA(m_editMarketData,
+                           "No market data subscription\r\n\r\nSelect a symbol and click 'Subscribe' to see live data");
+
+            // Clear internal market data
+            m_currentMarketData = MarketDataInfo{};
+        }
+        else
+        {
+            UpdateConsole("Failed to send MarketDataRequest");
+        }
+    }
+    catch (const std::exception &e)
+    {
+        UpdateConsole("Error creating MarketDataRequest: " + std::string(e.what()));
+    }
 }
 
 void DTCTestClientGUI::GetRealAccountData()
@@ -707,6 +771,64 @@ void DTCTestClientGUI::UpdateAccountInfo(const std::string &info)
 
     // Scroll to bottom
     SendMessage(m_editAccountInfo, EM_SCROLLCARET, 0, 0);
+}
+
+void DTCTestClientGUI::UpdateMarketData(const std::string &symbol, double bid, double ask, double last, double volume)
+{
+    if (!m_editMarketData)
+        return;
+
+    // Update internal market data
+    m_currentMarketData.symbol = symbol;
+    m_currentMarketData.bid_price = bid;
+    m_currentMarketData.ask_price = ask;
+    m_currentMarketData.last_price = last;
+    m_currentMarketData.volume = volume;
+    m_currentMarketData.is_subscribed = true;
+
+    // Get current time for timestamp
+    auto now = std::chrono::system_clock::now();
+    auto time_t = std::chrono::system_clock::to_time_t(now);
+    std::stringstream ss;
+    ss << std::put_time(std::localtime(&time_t), "%H:%M:%S");
+    m_currentMarketData.last_update_time = ss.str();
+
+    // Format market data display
+    std::stringstream marketDataText;
+    marketDataText << "=== LIVE MARKET DATA ===\r\n";
+    marketDataText << "Symbol: " << symbol << "\r\n";
+    marketDataText << "Last Update: " << m_currentMarketData.last_update_time << "\r\n\r\n";
+
+    if (bid > 0.0)
+    {
+        marketDataText << "BID: $" << std::fixed << std::setprecision(2) << bid << "\r\n";
+    }
+    if (ask > 0.0)
+    {
+        marketDataText << "ASK: $" << std::fixed << std::setprecision(2) << ask << "\r\n";
+    }
+    if (last > 0.0)
+    {
+        marketDataText << "LAST: $" << std::fixed << std::setprecision(2) << last << "\r\n";
+    }
+    if (volume > 0.0)
+    {
+        marketDataText << "VOLUME: " << std::fixed << std::setprecision(4) << volume << "\r\n";
+    }
+
+    // Calculate spread if both bid and ask are available
+    if (bid > 0.0 && ask > 0.0)
+    {
+        double spread = ask - bid;
+        double spread_pct = (spread / ask) * 100.0;
+        marketDataText << "SPREAD: $" << std::fixed << std::setprecision(4) << spread
+                       << " (" << std::setprecision(2) << spread_pct << "%)\r\n";
+    }
+
+    marketDataText << "\r\nStatus: LIVE STREAMING ✓";
+
+    // Replace all text in the market data window
+    SetWindowTextA(m_editMarketData, marketDataText.str().c_str());
 }
 
 void DTCTestClientGUI::ClearConsole()
@@ -934,6 +1056,57 @@ void DTCTestClientGUI::HandleDTCResponse(std::unique_ptr<open_dtc_server::core::
         UpdateAccountInfo("Avg Price: " + std::to_string(position_update->average_price));
         UpdateAccountInfo("Trade Account: " + position_update->trade_account);
         UpdateAccountInfo("");
+        break;
+    }
+
+    case open_dtc_server::core::dtc::MessageType::MARKET_DATA_UPDATE_BID_ASK:
+    {
+        auto *bid_ask_update = static_cast<open_dtc_server::core::dtc::MarketDataUpdateBidAsk *>(message.get());
+
+        UpdateConsole("[LIVE MARKET DATA] Bid/Ask Update:");
+        UpdateConsole("  Symbol ID: " + std::to_string(bid_ask_update->symbol_id));
+        UpdateConsole("  Bid: $" + std::to_string(bid_ask_update->bid_price) + " (qty: " + std::to_string(bid_ask_update->bid_quantity) + ")");
+        UpdateConsole("  Ask: $" + std::to_string(bid_ask_update->ask_price) + " (qty: " + std::to_string(bid_ask_update->ask_quantity) + ")");
+
+        // Update the market data display with live data
+        // We need to get the symbol from our current subscription since bid_ask_update doesn't contain it
+        if (m_currentMarketData.is_subscribed)
+        {
+            UpdateMarketData(
+                m_currentMarketData.symbol, // Use current subscribed symbol
+                bid_ask_update->bid_price,
+                bid_ask_update->ask_price,
+                0.0, // last_price not available in bid/ask update
+                0.0  // volume not available in bid/ask update
+            );
+        }
+        break;
+    }
+
+    case open_dtc_server::core::dtc::MessageType::MARKET_DATA_UPDATE_TRADE:
+    {
+        auto *trade_update = static_cast<open_dtc_server::core::dtc::MarketDataUpdateTrade *>(message.get());
+
+        UpdateConsole("[LIVE MARKET DATA] Trade Update:");
+        UpdateConsole("  Symbol ID: " + std::to_string(trade_update->symbol_id));
+        UpdateConsole("  Price: $" + std::to_string(trade_update->price));
+        UpdateConsole("  Volume: " + std::to_string(trade_update->volume));
+
+        // Update last price in our market data if we're subscribed
+        if (m_currentMarketData.is_subscribed)
+        {
+            m_currentMarketData.last_price = trade_update->price;
+            m_currentMarketData.volume = trade_update->volume;
+
+            // Update display with current market data
+            UpdateMarketData(
+                m_currentMarketData.symbol,
+                m_currentMarketData.bid_price,
+                m_currentMarketData.ask_price,
+                trade_update->price, // Update last price from trade
+                trade_update->volume // Update volume from trade
+            );
+        }
         break;
     }
 

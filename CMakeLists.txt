@@ -49,8 +49,10 @@ add_library(dtc_protocol STATIC
     src/core/dtc/protocol.cpp
 )
 
-# Create utility library (core) - header-only now
-add_library(dtc_util INTERFACE)
+# Create utility library (core) - now with advanced logging
+add_library(dtc_util STATIC
+    src/core/util/advanced_log.cpp
+)
 
 # Create auth/credentials library (core)
 add_library(dtc_auth STATIC
