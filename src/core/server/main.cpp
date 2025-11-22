@@ -1,6 +1,6 @@
 #include "coinbase_dtc_core/core/server/server.hpp"
 #include "coinbase_dtc_core/core/util/advanced_log.hpp"
-#include "coinbase_dtc_core/core/auth/cdp_credentials.hpp"
+#include "coinbase_dtc_core/core/auth/jwt_auth.hpp"
 #include "coinbase_dtc_core/exchanges/base/exchange_feed.hpp"
 #include <iostream>
 #include <chrono>
@@ -9,6 +9,23 @@
 
 // Global server instance for signal handling
 coinbase_dtc_core::core::server::DTCServer *g_server = nullptr;
+
+static std::string extract_api_key_short(const std::string &key)
+{
+    const auto pos = key.find_last_of('/');
+    if (pos != std::string::npos && pos + 1 < key.size())
+    {
+        return key.substr(pos + 1);
+    }
+    return key;
+}
+
+static std::string redact_key_id(const std::string &key)
+{
+    if (key.size() <= 8)
+        return key;
+    return key.substr(0, 4) + "..." + key.substr(key.size() - 4);
+}
 
 void signal_handler(int signal)
 {
@@ -126,14 +143,33 @@ int main(int argc, char *argv[])
 
         LOG_TRACE("[DEBUG] Configuring Coinbase exchange...");
         // Load CDP credentials from JSON file
-        LOG_TRACE("[DEBUG] Loading CDP credentials from: " + credentials_path);
-        coinbase_dtc_core::credentials::CDPCredentials credentials =
-            coinbase_dtc_core::credentials::CDPCredentialsManager::loadFromFile(credentials_path);
+        LOG_INFO("[CONFIG] Loading CDP credentials from: " + credentials_path);
+        open_dtc_server::auth::CDPCredentials credentials;
+        try
+        {
+            credentials = open_dtc_server::auth::CDPCredentials::from_json_file(credentials_path);
+            LOG_INFO("[CONFIG] Parsed CDP key id: " + redact_key_id(credentials.key_id));
+            LOG_INFO("[CONFIG] Private key length: " + std::to_string(credentials.private_key.size()));
+        }
+        catch (const std::exception &ex)
+        {
+            LOG_WARN(std::string("[WARNING] Failed to parse CDP credentials: ") + ex.what());
+        }
 
-        bool has_valid_credentials = !credentials.api_key_id.empty() && !credentials.private_key.empty();
+        if (!credentials.is_valid())
+        {
+            LOG_TRACE("[DEBUG] Attempting to load CDP credentials from environment variables");
+            credentials = open_dtc_server::auth::CDPCredentials::from_environment();
+            if (credentials.is_valid())
+            {
+                LOG_INFO("[CONFIG] Loaded CDP credentials from environment, key id: " + redact_key_id(credentials.key_id));
+            }
+        }
+
+        bool has_valid_credentials = credentials.is_valid();
         if (has_valid_credentials)
         {
-            LOG_INFO("[SUCCESS] CDP credentials loaded from file");
+            LOG_INFO("[SUCCESS] CDP credentials loaded successfully");
         }
         else
         {
@@ -151,9 +187,10 @@ int main(int argc, char *argv[])
         // Set credentials in config if available
         if (has_valid_credentials)
         {
-            coinbase_config.api_key = credentials.api_key_id;
+            coinbase_config.api_key = extract_api_key_short(credentials.key_id);
             coinbase_config.secret_key = credentials.private_key;
-            LOG_INFO("[CONFIG] Coinbase exchange configured with authentication");
+            coinbase_config.passphrase = credentials.passphrase;
+            LOG_INFO("[CONFIG] Coinbase exchange configured with authentication (key id " + redact_key_id(credentials.key_id) + ")");
         }
         else
         {

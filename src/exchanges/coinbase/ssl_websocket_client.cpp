@@ -8,6 +8,10 @@
 #include <fstream>
 #include <random>
 #include <cstring>
+#include <filesystem>
+#include <optional>
+#include <cstdlib>
+#include <unordered_set>
 
 // JSON and JWT libraries
 #include <nlohmann/json.hpp>
@@ -95,10 +99,11 @@ namespace open_dtc_server
                 if (!credentials_loaded_)
                 {
                     LOG_WARN("[WARNING] JWT credentials not loaded - will use public data only");
+                    LOG_WARN("[WARNING] JWT load summary -> api_key_id length: " + std::to_string(api_key_id_.size()) + ", private key length: " + std::to_string(private_key_.size()));
                 }
                 else
                 {
-                    LOG_INFO("[SUCCESS] JWT credentials loaded successfully");
+                    LOG_INFO("[SUCCESS] JWT credentials loaded successfully (key id length: " + std::to_string(api_key_id_.size()) + ")");
                 }
             }
 
@@ -167,6 +172,7 @@ namespace open_dtc_server
 
             void SSLWebSocketClient::set_credentials(const std::string &api_key_id, const std::string &private_key)
             {
+                LOG_INFO("[JWT] Applying credentials from server (key id length: " + std::to_string(api_key_id.size()) + ", private key length: " + std::to_string(private_key.size()) + ")");
                 api_key_id_ = api_key_id;
                 private_key_ = private_key;
                 credentials_loaded_ = !api_key_id_.empty() && !private_key_.empty();
@@ -177,16 +183,85 @@ namespace open_dtc_server
                 }
                 else
                 {
-                    LOG_WARN("[WARNING] Invalid credentials provided via parameter");
+                    LOG_WARN("[WARNING] Invalid credentials provided via parameter - missing key id or private key");
                 }
+            }
+
+            std::string SSLWebSocketClient::resolve_credentials_path() const
+            {
+                namespace fs = std::filesystem;
+
+                const fs::path default_relative(coinbase_dtc_core::exchanges::coinbase::secrets::CDP_JSON_FILE_PATH);
+                const fs::path config_relative("config/cdp_api_key_ECDSA.json");
+
+                std::vector<std::string> candidates;
+                std::unordered_set<std::string> seen;
+
+                auto add_candidate = [&](const fs::path &candidate)
+                {
+                    if (candidate.empty())
+                    {
+                        return;
+                    }
+
+                    std::string normalized = candidate.lexically_normal().string();
+                    if (normalized.empty())
+                    {
+                        return;
+                    }
+
+                    if (seen.emplace(normalized).second)
+                    {
+                        candidates.emplace_back(normalized);
+                    }
+                };
+
+                if (const char *env_path = std::getenv("CDP_CREDENTIALS_PATH"); env_path && *env_path)
+                {
+                    add_candidate(fs::path(env_path));
+                }
+
+                add_candidate(config_relative);
+                add_candidate(default_relative);
+
+                fs::path current = fs::current_path();
+                for (int i = 0; i < 4 && !current.empty(); ++i)
+                {
+                    add_candidate(current / config_relative);
+                    add_candidate(current / default_relative);
+                    current = current.parent_path();
+                }
+
+#ifdef _WIN32
+                char module_path[MAX_PATH];
+                if (GetModuleFileNameA(nullptr, module_path, MAX_PATH))
+                {
+                    fs::path exe_dir = fs::path(module_path).parent_path();
+                    add_candidate(exe_dir / config_relative);
+                }
+#endif
+
+                for (const auto &candidate : candidates)
+                {
+                    std::error_code ec;
+                    const fs::path candidate_path(candidate);
+                    if (fs::exists(candidate_path, ec))
+                    {
+                        return candidate_path.string();
+                    }
+                }
+
+                return default_relative.string();
             }
 
             std::string SSLWebSocketClient::load_api_key_id()
             {
+                const std::string json_path = resolve_credentials_path();
+                LOG_INFO("[AUTH] Loading API key id from credentials file: " + json_path);
+
                 try
                 {
                     // Try to load from JSON file first
-                    std::string json_path = coinbase_dtc_core::exchanges::coinbase::secrets::CDP_JSON_FILE_PATH;
                     std::ifstream file(json_path);
 
                     if (file.is_open())
@@ -202,9 +277,27 @@ namespace open_dtc_server
                             size_t last_slash = name.find_last_of('/');
                             if (last_slash != std::string::npos)
                             {
-                                return name.substr(last_slash + 1);
+                                std::string api_key_id = name.substr(last_slash + 1);
+                                if (!api_key_id.empty())
+                                {
+                                    LOG_INFO("[AUTH] API key id loaded from JSON (length " + std::to_string(api_key_id.size()) + ")");
+                                    return api_key_id;
+                                }
+                                LOG_WARN("[WARNING] Extracted API key id from JSON is empty");
+                            }
+                            else
+                            {
+                                LOG_WARN("[WARNING] Unable to parse API key id from JSON name field: " + name);
                             }
                         }
+                        else
+                        {
+                            LOG_WARN("[WARNING] Credentials JSON missing 'name' field");
+                        }
+                    }
+                    else
+                    {
+                        LOG_WARN("[WARNING] Credentials JSON file could not be opened: " + json_path + ". Run tools/start_server.cmd or set CDP_CREDENTIALS_PATH.");
                     }
                 }
                 catch (const std::exception &e)
@@ -213,15 +306,18 @@ namespace open_dtc_server
                 }
 
                 // Fallback to hardcoded value
+                LOG_INFO("[AUTH] Using fallback API key id from secrets header");
                 return coinbase_dtc_core::exchanges::coinbase::secrets::CDP_API_KEY_ID;
             }
 
             std::string SSLWebSocketClient::load_private_key()
             {
+                const std::string json_path = resolve_credentials_path();
+                LOG_INFO("[AUTH] Loading private key from credentials file: " + json_path);
+
                 try
                 {
                     // Try to load from JSON file first
-                    std::string json_path = coinbase_dtc_core::exchanges::coinbase::secrets::CDP_JSON_FILE_PATH;
                     std::ifstream file(json_path);
 
                     if (file.is_open())
@@ -231,8 +327,22 @@ namespace open_dtc_server
 
                         if (json_data.contains("privateKey"))
                         {
-                            return json_data["privateKey"];
+                            std::string key = json_data["privateKey"];
+                            if (!key.empty())
+                            {
+                                LOG_INFO("[AUTH] Private key loaded from JSON (length " + std::to_string(key.size()) + ")");
+                                return key;
+                            }
+                            LOG_WARN("[WARNING] privateKey field in JSON is empty");
                         }
+                        else
+                        {
+                            LOG_WARN("[WARNING] Credentials JSON missing 'privateKey' field");
+                        }
+                    }
+                    else
+                    {
+                        LOG_WARN("[WARNING] Credentials JSON file could not be opened for private key: " + json_path + ". Run tools/start_server.cmd or set CDP_CREDENTIALS_PATH.");
                     }
                 }
                 catch (const std::exception &e)
@@ -241,6 +351,7 @@ namespace open_dtc_server
                 }
 
                 // Fallback to hardcoded value
+                LOG_INFO("[AUTH] Using fallback private key from secrets header");
                 return coinbase_dtc_core::exchanges::coinbase::secrets::CDP_PRIVATE_KEY;
             }
 
@@ -1037,4 +1148,3 @@ namespace open_dtc_server
         } // namespace coinbase
     } // namespace feed
 } // namespace open_dtc_server
-

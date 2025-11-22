@@ -94,6 +94,7 @@ namespace open_dtc_server
                 std::string generate_jwt_token();
                 std::string load_private_key();
                 std::string load_api_key_id();
+                std::string resolve_credentials_path() const;
 
                 // Network operations
                 bool connect_tcp_socket();
