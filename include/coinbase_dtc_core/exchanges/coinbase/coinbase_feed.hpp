@@ -14,6 +14,8 @@
 #include <condition_variable>
 #include <chrono>
 #include <memory>
+#include <string>
+#include <vector>
 
 // Forward declaration to avoid circular includes
 namespace open_dtc_server
@@ -145,6 +147,9 @@ namespace open_dtc_server
                 // Connection management
                 bool should_reconnect() const;
                 void schedule_reconnect();
+                void initialize_credentials();
+                void configure_ssl_credentials();
+                bool has_credentials() const;
 
                 // Utility methods
                 void cleanup_socket();
@@ -195,6 +200,7 @@ namespace open_dtc_server
                 // Authentication
                 std::unique_ptr<auth::JWTAuthenticator> authenticator_;
                 auth::CDPCredentials credentials_;
+                mutable std::mutex credentials_mutex_;
 
                 // Symbol mapping tables (Coinbase-specific format)
                 std::unordered_map<std::string, std::string> coinbase_to_normalized_;
@@ -290,7 +296,7 @@ namespace open_dtc_server
                     L2UPDATE, // Level2 update
                     TICKER,
                     HEARTBEAT,
-                    ERROR,
+                    ERROR_MESSAGE,
                     UNKNOWN
                 };
 

@@ -1,5 +1,5 @@
 #include "coinbase_dtc_core/exchanges/coinbase/websocket_client.hpp"
-#include "coinbase_dtc_core/core/util/log.hpp"
+#include "coinbase_dtc_core/core/util/advanced_log.hpp"
 #include <iostream>
 #include <sstream>
 #include <chrono>
@@ -39,7 +39,7 @@ namespace open_dtc_server
                 int result = WSAStartup(MAKEWORD(2, 2), &wsaData);
                 if (result != 0)
                 {
-                    util::simple_log("[ERROR] WSAStartup failed: " + std::to_string(result));
+                    LOG_INFO("[ERROR] WSAStartup failed: " + std::to_string(result));
                 }
 #endif
             }
@@ -63,12 +63,12 @@ namespace open_dtc_server
                 host_ = host;
                 port_ = port;
 
-                util::simple_log("[WS] Connecting to " + host + ":" + std::to_string(port));
+                LOG_INFO("[WS] Connecting to " + host + ":" + std::to_string(port));
 
                 // Establish real WebSocket connection
                 if (!establish_websocket_connection())
                 {
-                    util::simple_log("[ERROR] Failed to establish WebSocket connection");
+                    LOG_INFO("[ERROR] Failed to establish WebSocket connection");
                     return false;
                 }
 
@@ -79,7 +79,7 @@ namespace open_dtc_server
                 worker_thread_ = std::thread(&WebSocketClient::worker_loop, this);
                 ping_thread_ = std::thread(&WebSocketClient::ping_loop, this);
 
-                util::simple_log("[SUCCESS] Connected to Coinbase WebSocket feed");
+                LOG_INFO("[SUCCESS] Connected to Coinbase WebSocket feed");
                 return true;
             }
 
@@ -90,7 +90,7 @@ namespace open_dtc_server
                     return;
                 }
 
-                util::simple_log("[WS] Disconnecting from Coinbase feed...");
+                LOG_INFO("[WS] Disconnecting from Coinbase feed...");
 
                 should_stop_.store(true);
                 connected_.store(false);
@@ -106,7 +106,7 @@ namespace open_dtc_server
                 }
 
                 cleanup_socket();
-                util::simple_log("[WS] Disconnected from Coinbase feed");
+                LOG_INFO("[WS] Disconnected from Coinbase feed");
             }
 
             bool WebSocketClient::subscribe_trades(const std::string &product_id)
@@ -122,7 +122,7 @@ namespace open_dtc_server
                     subscribed_symbols_.push_back(product_id);
                 }
 
-                util::simple_log("[WS] Subscribing to trades for " + product_id);
+                LOG_INFO("[WS] Subscribing to trades for " + product_id);
 
                 // Create subscription message (simplified JSON)
                 std::string message = create_subscribe_message("matches", product_id);
@@ -142,7 +142,7 @@ namespace open_dtc_server
                     return false;
                 }
 
-                util::simple_log("[WS] Subscribing to level2 for " + product_id);
+                LOG_INFO("[WS] Subscribing to level2 for " + product_id);
 
                 std::string message = create_subscribe_message("level2", product_id);
 
@@ -156,7 +156,7 @@ namespace open_dtc_server
 
             bool WebSocketClient::unsubscribe(const std::string &product_id)
             {
-                util::simple_log("[WS] Unsubscribing from " + product_id);
+                LOG_INFO("[WS] Unsubscribing from " + product_id);
                 return true;
             }
 
@@ -168,7 +168,7 @@ namespace open_dtc_server
                     if (!subscribe_trades(product_id) || !subscribe_level2(product_id))
                     {
                         all_success = false;
-                        util::simple_log("[WS] Failed to subscribe to " + product_id);
+                        LOG_INFO("[WS] Failed to subscribe to " + product_id);
                     }
                 }
                 return all_success;
@@ -194,7 +194,7 @@ namespace open_dtc_server
 
             void WebSocketClient::worker_loop()
             {
-                util::simple_log("[WS] Worker thread started - connecting to Coinbase");
+                LOG_INFO("[WS] Worker thread started - connecting to Coinbase");
 
                 // For now, use realistic simulation with proper symbol names
                 // TODO: Implement real WebSocket connection to wss://ws-feed.exchange.coinbase.com
@@ -294,7 +294,7 @@ namespace open_dtc_server
                     }
                 }
 
-                util::simple_log("[WS] Worker thread stopped");
+                LOG_INFO("[WS] Worker thread stopped");
             }
 
             void WebSocketClient::ping_loop()
@@ -349,7 +349,7 @@ namespace open_dtc_server
                 socket_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
                 if (socket_ < 0)
                 {
-                    util::simple_log("[ERROR] Failed to create socket");
+                    LOG_INFO("[ERROR] Failed to create socket");
                     return false;
                 }
 
@@ -357,7 +357,7 @@ namespace open_dtc_server
                 struct hostent *host_entry = gethostbyname(host_.c_str());
                 if (!host_entry)
                 {
-                    util::simple_log("[ERROR] Failed to resolve hostname: " + host_);
+                    LOG_INFO("[ERROR] Failed to resolve hostname: " + host_);
                     cleanup_socket();
                     return false;
                 }
@@ -372,17 +372,17 @@ namespace open_dtc_server
                 // Connect to server
                 if (connect(socket_, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
                 {
-                    util::simple_log("[ERROR] Failed to connect to " + host_ + ":" + std::to_string(port_));
+                    LOG_INFO("[ERROR] Failed to connect to " + host_ + ":" + std::to_string(port_));
                     cleanup_socket();
                     return false;
                 }
 
-                util::simple_log("[INFO] TCP connection established to " + host_);
+                LOG_INFO("[INFO] TCP connection established to " + host_);
 
                 // Perform WebSocket handshake
                 if (!perform_websocket_handshake())
                 {
-                    util::simple_log("[ERROR] WebSocket handshake failed");
+                    LOG_INFO("[ERROR] WebSocket handshake failed");
                     cleanup_socket();
                     return false;
                 }
@@ -435,7 +435,7 @@ namespace open_dtc_server
                 ssize_t sent = send(socket_, reinterpret_cast<const char *>(frame.data()), frame.size(), 0);
                 if (sent < 0)
                 {
-                    util::simple_log("[ERROR] Failed to send WebSocket frame");
+                    LOG_INFO("[ERROR] Failed to send WebSocket frame");
                     return false;
                 }
 
@@ -486,7 +486,7 @@ namespace open_dtc_server
                 ssize_t sent = send(socket_, request.c_str(), request.length(), 0);
                 if (sent < 0)
                 {
-                    util::simple_log("[ERROR] Failed to send WebSocket handshake");
+                    LOG_INFO("[ERROR] Failed to send WebSocket handshake");
                     return false;
                 }
 
@@ -495,7 +495,7 @@ namespace open_dtc_server
                 ssize_t received = recv(socket_, response, sizeof(response) - 1, 0);
                 if (received <= 0)
                 {
-                    util::simple_log("[ERROR] Failed to receive WebSocket handshake response");
+                    LOG_INFO("[ERROR] Failed to receive WebSocket handshake response");
                     return false;
                 }
                 response[received] = '\\0';
@@ -505,18 +505,18 @@ namespace open_dtc_server
                 // Check for successful handshake
                 if (response_str.find("HTTP/1.1 101") == std::string::npos)
                 {
-                    util::simple_log("[ERROR] WebSocket handshake failed - not 101 response");
-                    util::simple_log("[DEBUG] Response: " + response_str);
+                    LOG_INFO("[ERROR] WebSocket handshake failed - not 101 response");
+                    LOG_INFO("[DEBUG] Response: " + response_str);
                     return false;
                 }
 
                 if (response_str.find("Upgrade: websocket") == std::string::npos)
                 {
-                    util::simple_log("[ERROR] WebSocket handshake failed - no Upgrade header");
+                    LOG_INFO("[ERROR] WebSocket handshake failed - no Upgrade header");
                     return false;
                 }
 
-                util::simple_log("[SUCCESS] WebSocket handshake completed");
+                LOG_INFO("[SUCCESS] WebSocket handshake completed");
                 return true;
             }
 
@@ -541,3 +541,4 @@ namespace open_dtc_server
         } // namespace coinbase
     } // namespace feed
 } // namespace open_dtc_server
+

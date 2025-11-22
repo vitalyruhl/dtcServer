@@ -1,6 +1,6 @@
 #include "coinbase_dtc_core/core/server/server.hpp"
-#include "coinbase_dtc_core/core/util/log.hpp"
 #include "coinbase_dtc_core/core/util/advanced_log.hpp"
+#include "coinbase_dtc_core/core/auth/cdp_credentials.hpp"
 #include "coinbase_dtc_core/exchanges/base/exchange_feed.hpp"
 #include <iostream>
 #include <chrono>
@@ -24,9 +24,9 @@ int main(int argc, char *argv[])
     using namespace coinbase_dtc_core::core::server;
 
     // Parse command line arguments
-    std::string credentials_path = "cdp_api_key.json"; // Default path
-    std::string log_level = "advanced";                // Default log level
-    std::string log_config = "config/logging.ini";     // Default config path
+    std::string credentials_path = "config/cdp_api_key_ECDSA.json"; // Default path
+    std::string log_level = "advanced";                             // Default log level
+    std::string log_config = "config/logging.ini";                  // Default config path
 
     for (int i = 1; i < argc; i++)
     {
@@ -72,38 +72,42 @@ int main(int argc, char *argv[])
     // Set log level from command line
     if (log_level == "std")
     {
-        logger.setLogProfile(open_dtc_server::util::LogProfile::STD);
+        logger.setLogProfile(open_dtc_server::util::LogProfile::PROFILE_STD);
     }
     else if (log_level == "advanced")
     {
-        logger.setLogProfile(open_dtc_server::util::LogProfile::ADVANCED);
+        logger.setLogProfile(open_dtc_server::util::LogProfile::PROFILE_ADVANCED);
     }
     else if (log_level == "verbose")
     {
-        logger.setLogProfile(open_dtc_server::util::LogProfile::VERBOSE);
+        logger.setLogProfile(open_dtc_server::util::LogProfile::PROFILE_VERBOSE);
     }
     else
     {
-        LOG_WARNING("Unknown log level '" + log_level + "', using 'advanced'");
-        logger.setLogProfile(open_dtc_server::util::LogProfile::ADVANCED);
+        LOG_WARN("Unknown log level '" + log_level + "', using 'advanced'");
+        logger.setLogProfile(open_dtc_server::util::LogProfile::PROFILE_ADVANCED);
     }
 
     LOG_INFO("=== DTC SERVER STARTUP ===");
     LOG_INFO("Credentials file: " + credentials_path);
     LOG_INFO("Log level: " + log_level);
     LOG_INFO("Log config: " + log_config);
+    LOG_TRACE("[DEBUG] Logger initialization completed");
 
     if (credentials_path != "cdp_api_key.json")
     {
-        open_dtc_server::util::simple_log("[CONFIG] Using credentials file: " + credentials_path);
+        LOG_INFO("[CONFIG] Using credentials file: " + credentials_path);
     }
 
+    LOG_TRACE("[DEBUG] Setting up signal handling...");
     // Setup signal handling
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
+    LOG_TRACE("[DEBUG] Signal handlers configured");
 
     try
     {
+        LOG_TRACE("[DEBUG] Creating server configuration...");
         // Create server configuration
         ServerConfig config;
         config.bind_address = "0.0.0.0"; // Allow connections from any interface
@@ -112,10 +116,29 @@ int main(int argc, char *argv[])
         config.password = "";
         config.require_authentication = false;
         config.credentials_file_path = credentials_path; // Set the credentials path
+        LOG_TRACE("[DEBUG] Server config created");
 
+        LOG_TRACE("[DEBUG] Creating DTCServer instance...");
         // Create server instance
         DTCServer srv(config);
         g_server = &srv;
+        LOG_TRACE("[DEBUG] DTCServer instance created successfully");
+
+        LOG_TRACE("[DEBUG] Configuring Coinbase exchange...");
+        // Load CDP credentials from JSON file
+        LOG_TRACE("[DEBUG] Loading CDP credentials from: " + credentials_path);
+        coinbase_dtc_core::credentials::CDPCredentials credentials =
+            coinbase_dtc_core::credentials::CDPCredentialsManager::loadFromFile(credentials_path);
+
+        bool has_valid_credentials = !credentials.api_key_id.empty() && !credentials.private_key.empty();
+        if (has_valid_credentials)
+        {
+            LOG_INFO("[SUCCESS] CDP credentials loaded from file");
+        }
+        else
+        {
+            LOG_WARN("[WARNING] No valid CDP credentials found - using public data only");
+        }
 
         // Add Coinbase exchange for real market data
         open_dtc_server::exchanges::base::ExchangeConfig coinbase_config;
@@ -123,44 +146,63 @@ int main(int argc, char *argv[])
         coinbase_config.websocket_url = "wss://ws-feed.exchange.coinbase.com";
         coinbase_config.api_url = "https://api.exchange.coinbase.com";
         coinbase_config.port = 443;
-        coinbase_config.requires_auth = false; // For public market data
-        // Note: symbols will be configured separately through subscribe calls
+        coinbase_config.requires_auth = has_valid_credentials; // Enable auth if we have credentials
 
-        if (!srv.add_exchange(coinbase_config))
+        // Set credentials in config if available
+        if (has_valid_credentials)
         {
-            open_dtc_server::util::write_log("Warning: Failed to add Coinbase exchange - continuing with mock data");
+            coinbase_config.api_key = credentials.api_key_id;
+            coinbase_config.secret_key = credentials.private_key;
+            LOG_INFO("[CONFIG] Coinbase exchange configured with authentication");
         }
         else
         {
-            open_dtc_server::util::write_log("[SUCCESS] Added Coinbase exchange for real market data");
+            LOG_INFO("[CONFIG] Coinbase exchange configured for public data only");
+        }
+        LOG_TRACE("[DEBUG] Coinbase config prepared");
 
+        LOG_TRACE("[DEBUG] Adding Coinbase exchange to server...");
+        if (!srv.add_exchange(coinbase_config))
+        {
+            LOG_WARN("Warning: Failed to add Coinbase exchange - continuing with mock data");
+        }
+        else
+        {
+            LOG_INFO("[SUCCESS] Added Coinbase exchange for real market data");
+
+            LOG_TRACE("[DEBUG] Subscribing to BTC-USD...");
             // Subscribe to specific symbols for testing
             srv.subscribe_symbol("BTC-USD", "coinbase");
+            LOG_TRACE("[DEBUG] Symbol subscription completed");
             // Removed ETH-USD and SOL-USD to keep logs clean for testing
         }
-        open_dtc_server::util::write_log("Server configured, starting...");
+        LOG_INFO("Server configured, starting...");
 
         if (!srv.start())
         {
-            open_dtc_server::util::write_log("Failed to start server");
+            LOG_ERROR("Failed to start server");
             return 1;
         }
 
-        open_dtc_server::util::write_log("DTC Server started successfully");
-        open_dtc_server::util::write_log("Server status: " + srv.get_status());
+        LOG_INFO("DTC Server started successfully");
+        LOG_TRACE("Reading server status...");
+        LOG_INFO("Server status: " + srv.get_status());
 
+        LOG_TRACE("Entering main server loop...");
         // Keep server running
         while (srv.is_running())
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
-        open_dtc_server::util::write_log("CoinbaseDTC Server shutdown complete");
+        LOG_INFO("CoinbaseDTC Server shutdown complete");
+        LOG_TRACE("Exiting main function normally");
         return 0;
     }
     catch (const std::exception &e)
     {
-        open_dtc_server::util::write_log("Server error: " + std::string(e.what()));
+        LOG_ERROR("Server error: " + std::string(e.what()));
+        LOG_TRACE("Exception caught in main function");
         return 1;
     }
 }
