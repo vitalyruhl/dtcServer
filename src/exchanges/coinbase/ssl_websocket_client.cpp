@@ -946,6 +946,15 @@ namespace open_dtc_server
                 return send_message(subscribe_message.dump());
             }
 
+            bool SSLWebSocketClient::unsubscribe_from_ticker(const std::vector<std::string> &symbols)
+            {
+                nlohmann::json unsubscribe_message = {
+                    {"type", "unsubscribe"},
+                    {"channels", nlohmann::json::array({{{"name", "ticker"},
+                                                         {"product_ids", symbols}}})}};
+                return send_message(unsubscribe_message.dump());
+            }
+
             bool SSLWebSocketClient::subscribe_to_level2(const std::vector<std::string> &symbols)
             {
                 nlohmann::json subscribe_message = {
@@ -954,6 +963,15 @@ namespace open_dtc_server
                                                          {"product_ids", symbols}}})}};
 
                 return send_message(subscribe_message.dump());
+            }
+
+            bool SSLWebSocketClient::unsubscribe_from_level2(const std::vector<std::string> &symbols)
+            {
+                nlohmann::json unsubscribe_message = {
+                    {"type", "unsubscribe"},
+                    {"channels", nlohmann::json::array({{{"name", "level2"},
+                                                         {"product_ids", symbols}}})}};
+                return send_message(unsubscribe_message.dump());
             }
 
             void SSLWebSocketClient::set_message_callback(std::function<void(const std::string &)> callback)

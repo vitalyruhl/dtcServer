@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <map>
+#include <unordered_set>
 #include "coinbase_dtc_core/core/dtc/protocol.hpp"
 
 #pragma comment(lib, "comctl32.lib")
@@ -39,7 +41,8 @@ enum ControlID
     ID_BTN_CLEAR_CONSOLE = 1013,
     ID_EDIT_CONSOLE = 1014,
     ID_STATUS_BAR = 1015,
-    ID_EDIT_ACCOUNT_INFO = 1016
+    ID_EDIT_ACCOUNT_INFO = 1016,
+    ID_CHK_HIDE_DELISTED = 1017
 };
 
 class DTCTestClientGUI
@@ -104,9 +107,11 @@ private:
     HWND m_editConsole = nullptr;
     HWND m_editAccountInfo = nullptr;
     HWND m_editMarketData = nullptr; // NEW: Market data display area
+    HWND m_editSymbolInfo = nullptr; // NEW: Symbol info panel
     HWND m_statusBar = nullptr;
     HWND m_editServerHost = nullptr;
     HWND m_editServerPort = nullptr;
+    HWND m_chkHideDelisted = nullptr;
 
     // Application data
     HINSTANCE m_hInstance = nullptr;
@@ -128,30 +133,19 @@ private:
         bool is_subscribed = false;
     } m_currentMarketData;
 
-    // Window constants (updated for market data panel)
-    static constexpr int WINDOW_WIDTH = 1000; // Increased for better layout
-    static constexpr int WINDOW_HEIGHT = 750; // Increased for market data panel
-    static constexpr int BUTTON_WIDTH = 120;
-    static constexpr int BUTTON_HEIGHT = 30;
-    static constexpr int CONTROL_SPACING = 10;
+    // Symbol to ID mapping for market data subscriptions
+    std::map<std::string, uint16_t> m_symbolToIdMap;
+    std::map<uint16_t, std::string> m_idToSymbolMap;
 
-    // Control IDs
-    enum
-    {
-        ID_BTN_CONNECT = 1001,
-        ID_BTN_DISCONNECT,
-        ID_BTN_ACCOUNT_INFO,
-        ID_BTN_LOAD_SYMBOLS,
-        ID_BTN_SYMBOL_INFO,
-        ID_BTN_DOM_DATA,
-        ID_BTN_SUBSCRIBE,
-        ID_BTN_UNSUBSCRIBE,
-        ID_BTN_CLEAR_CONSOLE,
-        ID_COMBO_SYMBOLS,
-        ID_EDIT_CONSOLE,
-        ID_EDIT_MARKET_DATA, // NEW: Market data display
-        ID_STATUS_BAR,
-        ID_EDIT_SERVER_HOST,
-        ID_EDIT_SERVER_PORT
-    };
+    // Delisted tracking (client-side)
+    std::unordered_set<std::string> m_delistedSymbols;
+    bool m_hideDelisted = true;
+    void AddDelistedSymbol(const std::string &sym) { m_delistedSymbols.insert(sym); }
+    bool IsDelisted(const std::string &sym) const { return m_delistedSymbols.find(sym) != m_delistedSymbols.end(); }
+    void RefreshSymbolCombo();
+    bool IsLikelyDelisted(const std::string &sym) const;
+
+    // Last reject reason per symbol
+    std::map<std::string, std::string> m_lastRejectReason;
+    void UpdateSymbolInfoPanel(const std::string &symbol);
 };

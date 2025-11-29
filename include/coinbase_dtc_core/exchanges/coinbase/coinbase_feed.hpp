@@ -226,6 +226,13 @@ namespace open_dtc_server
                 mutable std::mutex subscriptions_mutex_;
                 std::unordered_map<std::string, SubscriptionInfo> subscriptions_; // key: type_productid
                 std::vector<std::string> subscribed_symbols_;                     // Cache for quick access
+                std::unordered_set<std::string> ticker_products_;                 // Aggregate set of active ticker product_ids
+
+                // Pending subscription tracking for error correlation
+                mutable std::mutex pending_subscriptions_mutex_;
+                std::unordered_map<std::string, std::chrono::steady_clock::time_point> pending_subscriptions_; // key: product_id, value: request_time
+                std::unordered_map<std::string, bool> subscription_results_;                                   // key: product_id, value: success/failure
+                std::condition_variable subscription_cv_;                                                      // For waiting on subscription results
 
                 // Message queues and synchronization
                 std::mutex send_queue_mutex_;

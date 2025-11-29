@@ -69,6 +69,8 @@ namespace open_dtc_server
                 // Coinbase-specific methods
                 bool subscribe_to_ticker(const std::vector<std::string> &symbols);
                 bool subscribe_to_level2(const std::vector<std::string> &symbols);
+                bool unsubscribe_from_ticker(const std::vector<std::string> &symbols);
+                bool unsubscribe_from_level2(const std::vector<std::string> &symbols);
                 bool authenticate_with_jwt();
                 void set_credentials(const std::string &api_key_id, const std::string &private_key);
 

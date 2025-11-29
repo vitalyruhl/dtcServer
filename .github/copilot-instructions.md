@@ -89,6 +89,11 @@
  * - GitHub-specific files (.github/FUNDING.yml, SECURITY.md, etc.) stay in their conventional locations
  * - Move obsolete or temporary files to appropriate directories or remove them
  * 
+ * Research & Idea Management:
+ * - ALWAYS check the /Ideas/ directory for existing solutions and research before starting new tasks
+ * - Review all contents including links to avoid redundant work if solutions already exist
+ * - Reference existing ideas and implementations to build upon previous work
+ * 
  * API Documentation & External Information Handling:
  * - When fetching information from the internet (APIs, documentation, etc.):
  *   1. Create a subdirectory in /dev-info/ for the specific source (e.g., /dev-info/coinbase-api/)

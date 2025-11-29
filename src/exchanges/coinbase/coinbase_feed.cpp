@@ -16,7 +16,26 @@ namespace open_dtc_server
         {
 
             CoinbaseFeed::CoinbaseFeed(const base::ExchangeConfig &config)
-                : base::ExchangeFeedBase(config)
+                : base::ExchangeFeedBase(config),
+                  connected_(false),
+                  should_stop_(false),
+                  websocket_connected_(false),
+                  socket_fd_(-1),
+                  websocket_host_(WEBSOCKET_HOST),
+                  websocket_path_(WEBSOCKET_PATH),
+                  websocket_port_(WEBSOCKET_PORT),
+                  should_reconnect_(false),
+                  last_successful_connection_(0),
+                  reconnect_attempts_(0),
+                  next_reconnect_time_(0),
+                  messages_received_(0),
+                  messages_sent_(0),
+                  last_message_time_(0),
+                  last_heartbeat_time_(0),
+                  total_trades_received_(0),
+                  total_level2_updates_(0),
+                  connection_uptime_start_(0),
+                  last_request_time_(0)
             {
                 LOG_INFO("[COINBASE] Coinbase feed initialized with config: " + config.name);
             }
@@ -69,9 +88,7 @@ namespace open_dtc_server
                                     LOG_INFO("[WARNING] No credentials available for SSL WebSocket authentication");
                                 }
                                 
-                                // Start with basic subscriptions for common symbols
-                                ssl_websocket_client_->subscribe_to_ticker({"BTC-USD"});
-                                LOG_INFO("[COINBASE] SSL WebSocket: Auto-subscribed to BTC-USD ticker for testing");
+                                // No auto-subscriptions on startup; await explicit server requests
                             } else {
                                 this->notify_connection(false);
                             } });
@@ -235,11 +252,13 @@ namespace open_dtc_server
 
                 std::string coinbase_symbol = exchange_symbol(symbol);
 
-                std::lock_guard<std::mutex> lock(subscriptions_mutex_);
-                subscriptions_[symbol] = SubscriptionInfo(SubscriptionType::TRADES, coinbase_symbol);
-                subscriptions_[symbol].active = true;
+                // Track pending subscription
+                {
+                    std::lock_guard<std::mutex> lock(pending_subscriptions_mutex_);
+                    pending_subscriptions_[coinbase_symbol] = std::chrono::steady_clock::now();
+                }
 
-                LOG_INFO("[COINBASE] Subscribed to trades for " + symbol + " (Coinbase: " + coinbase_symbol + ")");
+                LOG_INFO("[COINBASE] Requesting trades subscription for " + symbol + " (Coinbase: " + coinbase_symbol + ")");
 
                 // Send subscription to WebSocket client
                 if (websocket_client_)
@@ -252,7 +271,44 @@ namespace open_dtc_server
                     ssl_websocket_client_->subscribe_to_ticker({coinbase_symbol});
                 }
 
-                return true;
+                // Wait for subscription result or timeout
+                bool success = true;
+                {
+                    std::unique_lock<std::mutex> lock(pending_subscriptions_mutex_);
+                    auto timeout = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+
+                    subscription_cv_.wait_until(lock, timeout, [this, &coinbase_symbol, &success]()
+                                                {
+                                                    auto it = subscription_results_.find(coinbase_symbol);
+                                                    if (it != subscription_results_.end())
+                                                    {
+                                                        success = it->second;
+                                                        return true; // Result is available
+                                                    }
+                                                    return false; // Still waiting
+                                                });
+
+                    // Clean up pending tracking
+                    pending_subscriptions_.erase(coinbase_symbol);
+                    subscription_results_.erase(coinbase_symbol);
+                }
+
+                if (success)
+                {
+                    // Add to active subscriptions
+                    std::lock_guard<std::mutex> lock(subscriptions_mutex_);
+                    subscriptions_[symbol] = SubscriptionInfo(SubscriptionType::TRADES, coinbase_symbol);
+                    subscriptions_[symbol].active = true;
+                    ticker_products_.insert(coinbase_symbol);
+                    // Resubscribe with full ticker product list to ensure proper server state
+                    if (ssl_websocket_client_)
+                    {
+                        std::vector<std::string> all(ticker_products_.begin(), ticker_products_.end());
+                        ssl_websocket_client_->subscribe_to_ticker(all);
+                    }
+                }
+
+                return success;
             }
 
             bool CoinbaseFeed::subscribe_level2(const std::string &symbol)
@@ -265,11 +321,13 @@ namespace open_dtc_server
 
                 std::string coinbase_symbol = exchange_symbol(symbol);
 
-                std::lock_guard<std::mutex> lock(subscriptions_mutex_);
-                subscriptions_[symbol + "_level2"] = SubscriptionInfo(SubscriptionType::LEVEL2, coinbase_symbol);
-                subscriptions_[symbol + "_level2"].active = true;
+                // Track pending subscription
+                {
+                    std::lock_guard<std::mutex> lock(pending_subscriptions_mutex_);
+                    pending_subscriptions_[coinbase_symbol] = std::chrono::steady_clock::now();
+                }
 
-                LOG_INFO("[COINBASE] Subscribed to level2 for " + symbol + " (Coinbase: " + coinbase_symbol + ")");
+                LOG_INFO("[COINBASE] Requesting level2 subscription for " + symbol + " (Coinbase: " + coinbase_symbol + ")");
 
                 // Send subscription to WebSocket client
                 if (websocket_client_)
@@ -282,7 +340,37 @@ namespace open_dtc_server
                     ssl_websocket_client_->subscribe_to_level2({coinbase_symbol});
                 }
 
-                return true;
+                // Wait for subscription result or timeout
+                bool success = true;
+                {
+                    std::unique_lock<std::mutex> lock(pending_subscriptions_mutex_);
+                    auto timeout = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+
+                    subscription_cv_.wait_until(lock, timeout, [this, &coinbase_symbol, &success]()
+                                                {
+                                                    auto it = subscription_results_.find(coinbase_symbol);
+                                                    if (it != subscription_results_.end())
+                                                    {
+                                                        success = it->second;
+                                                        return true; // Result is available
+                                                    }
+                                                    return false; // Still waiting
+                                                });
+
+                    // Clean up pending tracking
+                    pending_subscriptions_.erase(coinbase_symbol);
+                    subscription_results_.erase(coinbase_symbol);
+                }
+
+                if (success)
+                {
+                    // Add to active subscriptions
+                    std::lock_guard<std::mutex> lock(subscriptions_mutex_);
+                    subscriptions_[symbol + "_level2"] = SubscriptionInfo(SubscriptionType::LEVEL2, coinbase_symbol);
+                    subscriptions_[symbol + "_level2"].active = true;
+                }
+
+                return success;
             }
 
             bool CoinbaseFeed::unsubscribe(const std::string &symbol)
@@ -296,8 +384,26 @@ namespace open_dtc_server
                     subscriptions_.erase(it);
 
                     LOG_INFO("[COINBASE] Unsubscribed from " + symbol + " (Coinbase: " + coinbase_symbol + ")");
-
-                    // TODO: Send actual unsubscribe message to Coinbase WebSocket
+                    // Send actual unsubscribe message to Coinbase WebSocket
+                    if (ssl_websocket_client_)
+                    {
+                        ticker_products_.erase(coinbase_symbol);
+                        // If products remain, send a fresh subscribe to remaining list; if none, send unsubscribe
+                        if (!ticker_products_.empty())
+                        {
+                            std::vector<std::string> remaining(ticker_products_.begin(), ticker_products_.end());
+                            ssl_websocket_client_->subscribe_to_ticker(remaining);
+                        }
+                        else
+                        {
+                            ssl_websocket_client_->unsubscribe_from_ticker({coinbase_symbol});
+                        }
+                        ssl_websocket_client_->unsubscribe_from_level2({coinbase_symbol});
+                    }
+                    else if (websocket_client_)
+                    {
+                        // Plain client unsubscribe TODO if implemented
+                    }
                     return true;
                 }
 
@@ -626,8 +732,28 @@ namespace open_dtc_server
                             LOG_INFO("[COINBASE] Ticker " + product_id + ": $" + std::to_string(price));
                         }
 
-                        // Could forward to DTC clients for price updates
-                        // For now, just acknowledge we received it
+                        // Forward as trade update to DTC clients
+                        exchanges::base::MarketTrade trade;
+                        trade.symbol = product_id;
+                        trade.price = price;
+                        trade.volume = json.contains("last_size") ? std::stod(json["last_size"].get<std::string>()) : 1.0;
+                        trade.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                              std::chrono::system_clock::now().time_since_epoch())
+                                              .count();
+                        on_trade_received(trade);
+
+                        // Also forward best bid/ask as level2 if available
+                        if (json.contains("best_bid") && json.contains("best_ask"))
+                        {
+                            exchanges::base::MarketLevel2 level2;
+                            level2.symbol = product_id;
+                            level2.bid_price = std::stod(json["best_bid"].get<std::string>());
+                            level2.ask_price = std::stod(json["best_ask"].get<std::string>());
+                            level2.bid_size = json.contains("best_bid_size") ? std::stod(json["best_bid_size"].get<std::string>()) : 1.0;
+                            level2.ask_size = json.contains("best_ask_size") ? std::stod(json["best_ask_size"].get<std::string>()) : 1.0;
+                            level2.timestamp = trade.timestamp;
+                            on_level2_received(level2);
+                        }
                     }
                 }
                 catch (const std::exception &e)
@@ -655,15 +781,58 @@ namespace open_dtc_server
                     {
                         error_msg = json["message"];
                     }
+                    else if (json.contains("reason"))
+                    {
+                        error_msg = json["reason"];
+                    }
 
                     LOG_INFO("[ERROR] Coinbase WebSocket: " + error_msg);
+                    LOG_INFO("[ERROR] Full error message: " + message);
 
-                    // Forward error to base class
+                    // Check if this error relates to a pending subscription
+                    std::vector<std::string> failed_products;
+
+                    if (json.contains("product_id"))
+                    {
+                        failed_products.push_back(json["product_id"]);
+                    }
+                    else if (json.contains("product_ids"))
+                    {
+                        for (const auto &product : json["product_ids"])
+                        {
+                            failed_products.push_back(product);
+                        }
+                    }
+                    else if (json.contains("reason"))
+                    {
+                        // Extract product ID from reason string (e.g., "ETH-USDC is delisted")
+                        std::string reason = json["reason"];
+                        std::size_t pos = reason.find(" is delisted");
+                        if (pos != std::string::npos)
+                        {
+                            std::string product_id = reason.substr(0, pos);
+                            failed_products.push_back(product_id);
+                        }
+                    }
+
+                    // Mark these subscriptions as failed
+                    {
+                        std::lock_guard<std::mutex> lock(pending_subscriptions_mutex_);
+                        for (const auto &product : failed_products)
+                        {
+                            // Unconditionally set failure result so waiters can observe it
+                            subscription_results_[product] = false;
+                            LOG_INFO("[COINBASE] Subscription failed for product: " + product + " - " + error_msg);
+                        }
+                        // Notify waiting threads
+                        subscription_cv_.notify_all();
+                    } // Forward error to base class
                     notify_error(error_msg);
                 }
                 catch (const std::exception &e)
                 {
                     LOG_INFO("[ERROR] Failed to parse error message: " + std::string(e.what()));
+                    LOG_INFO("[ERROR] Raw error message: " + message);
                 }
             }
 
@@ -690,7 +859,14 @@ namespace open_dtc_server
                                 {
                                     for (const auto &product : channel["product_ids"])
                                     {
-                                        LOG_INFO("[COINBASE] - Product: " + product.get<std::string>());
+                                        const std::string product_id = product.get<std::string>();
+                                        LOG_INFO("[COINBASE] - Product: " + product_id);
+                                        // Mark subscription success for waiting requests
+                                        {
+                                            std::lock_guard<std::mutex> lock(pending_subscriptions_mutex_);
+                                            subscription_results_[product_id] = true;
+                                            subscription_cv_.notify_all();
+                                        }
                                     }
                                 }
                             }
