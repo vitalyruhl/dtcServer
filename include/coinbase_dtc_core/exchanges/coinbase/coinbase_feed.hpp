@@ -14,6 +14,8 @@
 #include <condition_variable>
 #include <chrono>
 #include <memory>
+#include <string>
+#include <vector>
 
 // Forward declaration to avoid circular includes
 namespace open_dtc_server
@@ -145,6 +147,9 @@ namespace open_dtc_server
                 // Connection management
                 bool should_reconnect() const;
                 void schedule_reconnect();
+                void initialize_credentials();
+                void configure_ssl_credentials();
+                bool has_credentials() const;
 
                 // Utility methods
                 void cleanup_socket();
@@ -195,6 +200,7 @@ namespace open_dtc_server
                 // Authentication
                 std::unique_ptr<auth::JWTAuthenticator> authenticator_;
                 auth::CDPCredentials credentials_;
+                mutable std::mutex credentials_mutex_;
 
                 // Symbol mapping tables (Coinbase-specific format)
                 std::unordered_map<std::string, std::string> coinbase_to_normalized_;
@@ -220,6 +226,13 @@ namespace open_dtc_server
                 mutable std::mutex subscriptions_mutex_;
                 std::unordered_map<std::string, SubscriptionInfo> subscriptions_; // key: type_productid
                 std::vector<std::string> subscribed_symbols_;                     // Cache for quick access
+                std::unordered_set<std::string> ticker_products_;                 // Aggregate set of active ticker product_ids
+
+                // Pending subscription tracking for error correlation
+                mutable std::mutex pending_subscriptions_mutex_;
+                std::unordered_map<std::string, std::chrono::steady_clock::time_point> pending_subscriptions_; // key: product_id, value: request_time
+                std::unordered_map<std::string, bool> subscription_results_;                                   // key: product_id, value: success/failure
+                std::condition_variable subscription_cv_;                                                      // For waiting on subscription results
 
                 // Message queues and synchronization
                 std::mutex send_queue_mutex_;
@@ -290,7 +303,7 @@ namespace open_dtc_server
                     L2UPDATE, // Level2 update
                     TICKER,
                     HEARTBEAT,
-                    ERROR,
+                    ERROR_MESSAGE,
                     UNKNOWN
                 };
 

@@ -9,14 +9,16 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <map>
+#include <unordered_set>
 #include "coinbase_dtc_core/core/dtc/protocol.hpp"
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "ws2_32.lib")
 
 // Window dimensions
-const int WINDOW_WIDTH = 800;
-const int WINDOW_HEIGHT = 600;
+const int WINDOW_WIDTH = 1000; // Increased width for market data panel
+const int WINDOW_HEIGHT = 750; // Increased height for market data panel
 const int CONTROL_SPACING = 10;
 const int BUTTON_WIDTH = 100;
 const int BUTTON_HEIGHT = 25;
@@ -39,7 +41,8 @@ enum ControlID
     ID_BTN_CLEAR_CONSOLE = 1013,
     ID_EDIT_CONSOLE = 1014,
     ID_STATUS_BAR = 1015,
-    ID_EDIT_ACCOUNT_INFO = 1016
+    ID_EDIT_ACCOUNT_INFO = 1016,
+    ID_CHK_HIDE_DELISTED = 1017
 };
 
 class DTCTestClientGUI
@@ -77,6 +80,7 @@ private:
     void UpdateConsole(const std::string &message);
     void UpdateStatus(const std::string &status);
     void UpdateAccountInfo(const std::string &info);
+    void UpdateMarketData(const std::string &symbol, double bid, double ask, double last, double volume); // NEW
     void ClearConsole();
     std::string GetSelectedSymbol();
 
@@ -102,9 +106,12 @@ private:
     HWND m_comboProductType = nullptr;
     HWND m_editConsole = nullptr;
     HWND m_editAccountInfo = nullptr;
+    HWND m_editMarketData = nullptr; // NEW: Market data display area
+    HWND m_editSymbolInfo = nullptr; // NEW: Symbol info panel
     HWND m_statusBar = nullptr;
     HWND m_editServerHost = nullptr;
     HWND m_editServerPort = nullptr;
+    HWND m_chkHideDelisted = nullptr;
 
     // Application data
     HINSTANCE m_hInstance = nullptr;
@@ -112,29 +119,36 @@ private:
     SOCKET m_socket = INVALID_SOCKET;
     std::string m_serverHost = "127.0.0.1";
     int m_serverPort = 11099;
-    std::vector<uint8_t> m_incomingBuffer; // Window constants
-    static constexpr int WINDOW_WIDTH = 800;
-    static constexpr int WINDOW_HEIGHT = 600;
-    static constexpr int BUTTON_WIDTH = 120;
-    static constexpr int BUTTON_HEIGHT = 30;
-    static constexpr int CONTROL_SPACING = 10;
+    std::vector<uint8_t> m_incomingBuffer;
 
-    // Control IDs
-    enum
+    // Market data tracking
+    struct MarketDataInfo
     {
-        ID_BTN_CONNECT = 1001,
-        ID_BTN_DISCONNECT,
-        ID_BTN_ACCOUNT_INFO,
-        ID_BTN_LOAD_SYMBOLS,
-        ID_BTN_SYMBOL_INFO,
-        ID_BTN_DOM_DATA,
-        ID_BTN_SUBSCRIBE,
-        ID_BTN_UNSUBSCRIBE,
-        ID_BTN_CLEAR_CONSOLE,
-        ID_COMBO_SYMBOLS,
-        ID_EDIT_CONSOLE,
-        ID_STATUS_BAR,
-        ID_EDIT_SERVER_HOST,
-        ID_EDIT_SERVER_PORT
-    };
+        std::string symbol;
+        double bid_price = 0.0;
+        double ask_price = 0.0;
+        double last_price = 0.0;
+        double volume = 0.0;
+        std::string last_update_time;
+        bool is_subscribed = false;
+    } m_currentMarketData;
+
+    // Symbol to ID mapping for market data subscriptions
+    std::map<std::string, uint16_t> m_symbolToIdMap;
+    std::map<uint16_t, std::string> m_idToSymbolMap;
+
+    // Delisted tracking (client-side)
+    std::unordered_set<std::string> m_delistedSymbols;
+    bool m_hideDelisted = true;
+    void AddDelistedSymbol(const std::string &sym) { m_delistedSymbols.insert(sym); }
+    bool IsDelisted(const std::string &sym) const { return m_delistedSymbols.find(sym) != m_delistedSymbols.end(); }
+    void RefreshSymbolCombo();
+    bool IsLikelyDelisted(const std::string &sym) const;
+
+    // Last reject reason per symbol
+    std::map<std::string, std::string> m_lastRejectReason;
+    void UpdateSymbolInfoPanel(const std::string &symbol);
+
+    // Cache of latest SecurityDefinitionResponse per symbol for richer panel info
+    std::map<std::string, open_dtc_server::core::dtc::SecurityDefinitionResponse> m_symbolInfoCache;
 };

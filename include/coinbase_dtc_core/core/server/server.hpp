@@ -12,6 +12,7 @@
 #include <mutex>
 #include <vector>
 #include <functional>
+#include <unordered_set>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -262,6 +263,22 @@ namespace coinbase_dtc_core
                 std::atomic<uint64_t> total_trade_updates_sent_{0};
                 std::atomic<uint64_t> total_level2_updates_sent_{0};
                 std::chrono::steady_clock::time_point server_start_time_;
+
+                // Delisted symbol tracking
+                std::unordered_set<std::string> delisted_symbols_;
+                mutable std::mutex delisted_mutex_;
+
+                void mark_delisted(const std::string &symbol)
+                {
+                    std::lock_guard<std::mutex> lock(delisted_mutex_);
+                    delisted_symbols_.insert(symbol);
+                }
+
+                bool is_delisted(const std::string &symbol) const
+                {
+                    std::lock_guard<std::mutex> lock(delisted_mutex_);
+                    return delisted_symbols_.find(symbol) != delisted_symbols_.end();
+                }
             };
 
             /**

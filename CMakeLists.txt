@@ -49,8 +49,10 @@ add_library(dtc_protocol STATIC
     src/core/dtc/protocol.cpp
 )
 
-# Create utility library (core) - header-only now
-add_library(dtc_util INTERFACE)
+# Create utility library (core) - now with advanced logging
+add_library(dtc_util STATIC
+    src/core/util/advanced_log.cpp
+)
 
 # Create auth/credentials library (core)
 add_library(dtc_auth STATIC
@@ -100,7 +102,7 @@ target_include_directories(dtc_protocol PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-target_include_directories(dtc_util INTERFACE
+target_include_directories(dtc_util PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
@@ -238,6 +240,24 @@ if (BUILD_TESTING AND ENABLE_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/settings
     )
+
+    add_executable(test_logger_simple
+        tests/core/util/test_logger_simple.cpp
+    )
+    target_link_libraries(test_logger_simple dtc_util)
+    target_include_directories(test_logger_simple PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+
+    add_executable(test_logger
+        tests/core/util/test_logger.cpp
+    )
+    target_link_libraries(test_logger dtc_util)
+    target_include_directories(test_logger PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
     
     # TEMPORARY: Disabled until Protocol methods are fully implemented
     add_executable(test_dtc_protocol
@@ -272,6 +292,8 @@ if (BUILD_TESTING AND ENABLE_TESTING)
     #     ${CMAKE_CURRENT_SOURCE_DIR}/settings
     # )
     
+# Tests that require CURL
+if(CURL_FOUND)
     # Real Coinbase Account Info Test
     add_executable(test_coinbase_account_info
         src/tests/test_coinbase_account_info.cpp
@@ -282,6 +304,13 @@ if (BUILD_TESTING AND ENABLE_TESTING)
         dtc_util
         CURL::libcurl
     )
+    if(WIN32)
+        target_link_libraries(test_coinbase_account_info
+            winhttp
+            ws2_32
+            crypt32
+        )
+    endif()
     if(nlohmann_json_FOUND)
         target_link_libraries(test_coinbase_account_info nlohmann_json::nlohmann_json)
     endif()
@@ -299,10 +328,39 @@ if (BUILD_TESTING AND ENABLE_TESTING)
         dtc_util
         CURL::libcurl
     )
+    if(WIN32)
+        target_link_libraries(test_coinbase_endpoints
+            winhttp
+            ws2_32
+            crypt32
+        )
+    endif()
     target_include_directories(test_coinbase_endpoints PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/settings
     )
+
+    add_executable(test_jwt_auth
+        tests/exchanges/coinbase/test_jwt_auth.cpp
+    )
+    target_link_libraries(test_jwt_auth
+        dtc_auth
+        dtc_util
+        CURL::libcurl
+    )
+    if(WIN32)
+        target_link_libraries(test_jwt_auth
+            winhttp
+            ws2_32
+            crypt32
+        )
+    endif()
+    target_include_directories(test_jwt_auth PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/settings
+    )
+    target_compile_definitions(test_jwt_auth PRIVATE HAS_LIBCURL)
+endif() # CURL_FOUND
     
     # TEMPORARY: Disabled due to missing header files
     # add_executable(test_advanced_trade_api
@@ -476,6 +534,8 @@ if (BUILD_TESTING AND ENABLE_TESTING)
     
     # Add tests to CTest
     add_test(NAME BasicTest COMMAND test_basic)
+    add_test(NAME LoggerSimpleTest COMMAND test_logger_simple)
+    add_test(NAME LoggerComponentTest COMMAND test_logger)
     add_test(NAME DTCProtocolTest COMMAND test_dtc_protocol)
     # ServerTest removed - redundant functionality covered by integration tests
     # Legacy tests removed
@@ -487,6 +547,10 @@ if (BUILD_TESTING AND ENABLE_TESTING)
     add_test(NAME DTCIntegrationTest COMMAND test_dtc_integration)
     add_test(NAME MultiExchangeTest COMMAND test_multi_exchange)
     # add_test(NAME EnvironmentTest COMMAND test_environment)
+
+    if(TARGET test_jwt_auth)
+        add_test(NAME JWTAuthTest COMMAND test_jwt_auth)
+    endif()
     
     # Add PowerShell server test (CI/CD friendly)
     if(WIN32)
@@ -602,3 +666,23 @@ if(FALSE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/dtc_test_client/main.cpp")
     
     message(STATUS "✅ DTC Test Client Console will be built")
 endif()
+
+# Minimal diagnostic executable
+add_executable(minimal_test src/core/server/main_minimal.cpp)
+set_target_properties(minimal_test PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+    OUTPUT_NAME "minimal_test"
+)
+
+# Step-by-step diagnostic executable
+add_executable(stepwise_test src/core/server/main_stepwise.cpp)
+set_target_properties(stepwise_test PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+    OUTPUT_NAME "stepwise_test"
+)
+
+message(STATUS "✅ Diagnostic minimal executables will be built")

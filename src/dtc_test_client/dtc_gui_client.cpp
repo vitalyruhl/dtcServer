@@ -3,6 +3,7 @@
 #include <sstream>
 #include <iomanip>
 #include <chrono>
+#include <algorithm>
 
 DTCTestClientGUI::DTCTestClientGUI()
 {
@@ -12,6 +13,59 @@ DTCTestClientGUI::DTCTestClientGUI()
     {
         MessageBoxA(nullptr, "Failed to initialize Winsock", "Error", MB_ICONERROR);
     }
+}
+
+void DTCTestClientGUI::RefreshSymbolCombo()
+{
+    if (!m_comboSymbols)
+        return;
+
+    // Preserve current selection
+    std::string current = GetSelectedSymbol();
+
+    // Gather all symbols from mapping (these reflect full universe we've seen)
+    std::vector<std::string> allSymbols;
+    allSymbols.reserve(m_symbolToIdMap.size());
+    for (auto &p : m_symbolToIdMap)
+    {
+        allSymbols.push_back(p.first);
+    }
+
+    // Reset combo
+    SendMessage(m_comboSymbols, CB_RESETCONTENT, 0, 0);
+
+    for (const auto &sym : allSymbols)
+    {
+        if (m_hideDelisted && IsDelisted(sym))
+            continue;
+        SendMessageA(m_comboSymbols, CB_ADDSTRING, 0, (LPARAM)sym.c_str());
+    }
+
+    // Restore selection if still present
+    if (!current.empty())
+    {
+        int idx = SendMessageA(m_comboSymbols, CB_FINDSTRINGEXACT, -1, (LPARAM)current.c_str());
+        if (idx != CB_ERR)
+        {
+            SendMessage(m_comboSymbols, CB_SETCURSEL, idx, 0);
+        }
+        else if (SendMessage(m_comboSymbols, CB_GETCOUNT, 0, 0) > 0)
+        {
+            SendMessage(m_comboSymbols, CB_SETCURSEL, 0, 0);
+        }
+    }
+}
+
+bool DTCTestClientGUI::IsLikelyDelisted(const std::string &sym) const
+{
+    // Heuristic: Major pairs with USDC suffix currently rejected (BTC-USDC, ETH-USDC)
+    // Extend as needed if more confirmed delistings are observed.
+    if (sym.size() < 8)
+        return false;
+    if (sym.rfind("-USDC") == std::string::npos)
+        return false;
+    std::string base = sym.substr(0, sym.find('-'));
+    return (base == "BTC" || base == "ETH");
 }
 
 DTCTestClientGUI::~DTCTestClientGUI()
@@ -184,11 +238,27 @@ void DTCTestClientGUI::OnCreate(HWND hwnd)
 
     // Add some default symbols
     SendMessageA(m_comboSymbols, CB_ADDSTRING, 0, (LPARAM) "BTC-USD");
+    SendMessageA(m_comboSymbols, CB_ADDSTRING, 0, (LPARAM) "BTC-USDC");
     SendMessageA(m_comboSymbols, CB_ADDSTRING, 0, (LPARAM) "ETH-USD");
     SendMessageA(m_comboSymbols, CB_ADDSTRING, 0, (LPARAM) "STRK-USD");
-    SendMessageA(m_comboSymbols, CB_SETCURSEL, 0, 0);
+    // Default to USDC pair if present
+    int defaultIndex = SendMessageA(m_comboSymbols, CB_FINDSTRINGEXACT, -1, (LPARAM) "BTC-USDC");
+    if (defaultIndex == CB_ERR)
+    {
+        SendMessageA(m_comboSymbols, CB_SETCURSEL, 0, 0);
+    }
+    else
+    {
+        SendMessageA(m_comboSymbols, CB_SETCURSEL, defaultIndex, 0);
+    }
 
     y += 30;
+
+    // Hide delisted checkbox
+    m_chkHideDelisted = CreateWindowA("BUTTON", "Hide delisted", WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX,
+                                      x, y, 120, 20, hwnd, (HMENU)ID_CHK_HIDE_DELISTED, m_hInstance, nullptr);
+    SendMessage(m_chkHideDelisted, BM_SETCHECK, BST_CHECKED, 0);
+    y += 25;
 
     // Product Type selection
     CreateWindowA("STATIC", "Product Type:", WS_VISIBLE | WS_CHILD,
@@ -269,6 +339,18 @@ void DTCTestClientGUI::OnCreate(HWND hwnd)
                                       WS_VISIBLE | WS_CHILD | WS_BORDER | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY,
                                       account_info_x, y, console_width, 200, hwnd, (HMENU)ID_EDIT_ACCOUNT_INFO, m_hInstance, nullptr);
 
+    // Symbol Info Panel (top-right)
+    CreateWindowA("STATIC", "Symbol Information:", WS_VISIBLE | WS_CHILD,
+                  account_info_x, y - 25 - 220, 150, 20, hwnd, nullptr, m_hInstance, nullptr);
+
+    m_editSymbolInfo = CreateWindowA("EDIT", "Select a symbol and press 'Symbol Info'",
+                                     WS_VISIBLE | WS_CHILD | WS_BORDER | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY,
+                                     account_info_x, y - 220, console_width, 190, hwnd, nullptr, m_hInstance, nullptr);
+
+    // Symbol to ID mapping for market data subscriptions
+    std::map<std::string, uint32_t> m_symbolToIdMap;
+    std::map<uint32_t, std::string> m_idToSymbolMap;
+
     // Status bar
     m_statusBar = CreateWindowA("msctls_statusbar32", "Ready",
                                 WS_VISIBLE | WS_CHILD | SBARS_SIZEGRIP,
@@ -300,6 +382,8 @@ void DTCTestClientGUI::OnCommand(HWND hwnd, WPARAM wParam)
         break;
     case ID_BTN_SYMBOL_INFO:
         GetSymbolInfo();
+        // Also update panel with known local info
+        UpdateSymbolInfoPanel(GetSelectedSymbol());
         break;
     case ID_BTN_DOM_DATA:
         GetDOMData();
@@ -312,6 +396,11 @@ void DTCTestClientGUI::OnCommand(HWND hwnd, WPARAM wParam)
         break;
     case ID_BTN_CLEAR_CONSOLE:
         ClearConsole();
+        break;
+    case ID_CHK_HIDE_DELISTED:
+        m_hideDelisted = (SendMessage(m_chkHideDelisted, BM_GETCHECK, 0, 0) == BST_CHECKED);
+        RefreshSymbolCombo();
+        UpdateConsole(std::string("Delisted filter ") + (m_hideDelisted ? "ENABLED" : "DISABLED"));
         break;
     }
 }
@@ -521,17 +610,8 @@ void DTCTestClientGUI::GetSymbolInfo()
         return;
     }
 
-    UpdateConsole("Getting symbol info for: " + symbol);
-
-    // TODO: Implement actual DTC symbol info request
-    UpdateConsole("Symbol Info for " + symbol + ":");
-    UpdateConsole("   Full Name: " + symbol);
-    UpdateConsole("   Type: Cryptocurrency Pair");
-    UpdateConsole("   Base Currency: " + symbol.substr(0, symbol.find('-')));
-    UpdateConsole("   Quote Currency: " + symbol.substr(symbol.find('-') + 1));
-    UpdateConsole("   Min Order Size: 0.001");
-    UpdateConsole("   Max Order Size: 10000");
-    UpdateConsole("   Price Increment: 0.01");
+    // Use cached SecurityDefinition info and update the panel; no mocked console spam
+    UpdateSymbolInfoPanel(symbol);
 }
 
 void DTCTestClientGUI::GetDOMData()
@@ -578,11 +658,50 @@ void DTCTestClientGUI::SubscribeToSymbol()
         return;
     }
 
-    UpdateConsole("Subscribing to real-time data for: " + symbol);
+    UpdateConsole("Subscribing to real-time market data for: " + symbol);
 
-    // TODO: Implement actual DTC subscription request
-    UpdateConsole("Subscribed to " + symbol);
-    UpdateConsole("You will now receive real-time updates for this symbol");
+    try
+    {
+        // Get symbol ID if available, otherwise use 0
+        uint16_t symbol_id = 0;
+        auto it = m_symbolToIdMap.find(symbol);
+        if (it != m_symbolToIdMap.end())
+        {
+            symbol_id = it->second;
+            UpdateConsole("Using symbol ID: " + std::to_string(symbol_id) + " for " + symbol);
+        }
+        else
+        {
+            UpdateConsole("Warning: No symbol ID found for " + symbol + ", using 0");
+        }
+
+        // Create MarketDataRequest for subscription
+        open_dtc_server::core::dtc::Protocol protocol_handler;
+        auto market_data_request = protocol_handler.create_market_data_request(
+            open_dtc_server::core::dtc::RequestAction::SUBSCRIBE, symbol_id, symbol, "COINBASE");
+
+        // Create the DTC message
+        auto request_data = protocol_handler.create_message(*market_data_request);
+
+        // Send to server
+        if (SendDTCMessage(request_data))
+        {
+            UpdateConsole("MarketDataRequest sent for " + symbol);
+            UpdateConsole("Waiting for live market data...");
+
+            // Update market data display to show subscription status
+            SetWindowTextA(m_editMarketData,
+                           ("Subscribing to " + symbol + "...\r\n\r\nWaiting for live market data from server.\r\n\r\nStatus: SUBSCRIBING").c_str());
+        }
+        else
+        {
+            UpdateConsole("Failed to send MarketDataRequest");
+        }
+    }
+    catch (const std::exception &e)
+    {
+        UpdateConsole("Error creating MarketDataRequest: " + std::string(e.what()));
+    }
 }
 
 void DTCTestClientGUI::UnsubscribeFromSymbol()
@@ -602,8 +721,37 @@ void DTCTestClientGUI::UnsubscribeFromSymbol()
 
     UpdateConsole("Unsubscribing from: " + symbol);
 
-    // TODO: Implement actual DTC unsubscribe request
-    UpdateConsole("Unsubscribed from " + symbol);
+    try
+    {
+        // Create MarketDataRequest for unsubscription
+        open_dtc_server::core::dtc::Protocol protocol_handler;
+        auto market_data_request = protocol_handler.create_market_data_request(
+            open_dtc_server::core::dtc::RequestAction::UNSUBSCRIBE, 0, symbol, "COINBASE");
+
+        // Create the DTC message
+        auto request_data = protocol_handler.create_message(*market_data_request);
+
+        // Send to server
+        if (SendDTCMessage(request_data))
+        {
+            UpdateConsole("MarketDataRequest (unsubscribe) sent for " + symbol);
+
+            // Clear market data display
+            SetWindowTextA(m_editMarketData,
+                           "No market data subscription\r\n\r\nSelect a symbol and click 'Subscribe' to see live data");
+
+            // Clear internal market data
+            m_currentMarketData = MarketDataInfo{};
+        }
+        else
+        {
+            UpdateConsole("Failed to send MarketDataRequest");
+        }
+    }
+    catch (const std::exception &e)
+    {
+        UpdateConsole("Error creating MarketDataRequest: " + std::string(e.what()));
+    }
 }
 
 void DTCTestClientGUI::GetRealAccountData()
@@ -707,6 +855,123 @@ void DTCTestClientGUI::UpdateAccountInfo(const std::string &info)
 
     // Scroll to bottom
     SendMessage(m_editAccountInfo, EM_SCROLLCARET, 0, 0);
+}
+
+void DTCTestClientGUI::UpdateMarketData(const std::string &symbol, double bid, double ask, double last, double volume)
+{
+    if (!m_editMarketData)
+        return;
+
+    // Update internal market data
+    m_currentMarketData.symbol = symbol;
+    m_currentMarketData.bid_price = bid;
+    m_currentMarketData.ask_price = ask;
+    m_currentMarketData.last_price = last;
+    m_currentMarketData.volume = volume;
+    m_currentMarketData.is_subscribed = true;
+
+    // Get current time for timestamp
+    auto now = std::chrono::system_clock::now();
+    auto time_t = std::chrono::system_clock::to_time_t(now);
+    std::stringstream ss;
+    ss << std::put_time(std::localtime(&time_t), "%H:%M:%S");
+    m_currentMarketData.last_update_time = ss.str();
+
+    // Format market data display
+    std::stringstream marketDataText;
+    marketDataText << "=== LIVE MARKET DATA ===\r\n";
+    marketDataText << "Symbol: " << symbol << "\r\n";
+    marketDataText << "Last Update: " << m_currentMarketData.last_update_time << "\r\n\r\n";
+
+    if (bid > 0.0)
+    {
+        marketDataText << "BID: $" << std::fixed << std::setprecision(2) << bid << "\r\n";
+    }
+    if (ask > 0.0)
+    {
+        marketDataText << "ASK: $" << std::fixed << std::setprecision(2) << ask << "\r\n";
+    }
+    if (last > 0.0)
+    {
+        marketDataText << "LAST: $" << std::fixed << std::setprecision(2) << last << "\r\n";
+    }
+    if (volume > 0.0)
+    {
+        marketDataText << "VOLUME: " << std::fixed << std::setprecision(4) << volume << "\r\n";
+    }
+
+    // Calculate spread if both bid and ask are available
+    if (bid > 0.0 && ask > 0.0)
+    {
+        double spread = ask - bid;
+        double spread_pct = (spread / ask) * 100.0;
+        marketDataText << "SPREAD: $" << std::fixed << std::setprecision(4) << spread
+                       << " (" << std::setprecision(2) << spread_pct << "%)\r\n";
+    }
+
+    marketDataText << "\r\nStatus: LIVE STREAMING ✓";
+
+    // Replace all text in the market data window
+    SetWindowTextA(m_editMarketData, marketDataText.str().c_str());
+}
+
+void DTCTestClientGUI::UpdateSymbolInfoPanel(const std::string &symbol)
+{
+    if (!m_editSymbolInfo)
+        return;
+    if (symbol.empty())
+    {
+        SetWindowTextA(m_editSymbolInfo, "No symbol selected");
+        return;
+    }
+
+    bool delisted = IsDelisted(symbol) || IsLikelyDelisted(symbol);
+    bool l2_available = false;
+    std::string reason = "";
+    auto it = m_lastRejectReason.find(symbol);
+    if (it != m_lastRejectReason.end())
+        reason = it->second;
+
+    std::stringstream ss;
+    ss << "Symbol: " << symbol << "\r\n";
+    ss << "Exchange: coinbase\r\n";
+
+    // Show cached SecurityDefinition details if available
+    auto infoIt = m_symbolInfoCache.find(symbol);
+    if (infoIt != m_symbolInfoCache.end())
+    {
+        const auto &info = infoIt->second;
+        if (!info.display_name.empty())
+        {
+            ss << "Display Name: " << info.display_name << "\r\n";
+        }
+        if (!info.base_currency.empty() || !info.quote_currency.empty())
+        {
+            ss << "Base/Quote: " << (info.base_currency.empty() ? "?" : info.base_currency)
+               << " / " << (info.quote_currency.empty() ? "?" : info.quote_currency) << "\r\n";
+        }
+        ss << "Trading Disabled: " << (info.trading_disabled ? "YES" : "NO") << "\r\n";
+        ss << "Min Tick: " << std::fixed << std::setprecision(8) << info.min_price_increment << "\r\n";
+        ss << "Base Increment: " << std::fixed << std::setprecision(8) << info.base_increment << "\r\n";
+        ss << "Quote Increment: " << std::fixed << std::setprecision(8) << info.quote_increment << "\r\n";
+
+        // Interpret has_market_depth_data as L2 availability when auth is present
+        l2_available = (info.has_market_depth_data != 0);
+    }
+    else
+    {
+        ss << "Min Tick: (not provided)\r\n";
+    }
+
+    ss << "Delisted: " << (delisted ? "YES" : "NO") << "\r\n";
+    ss << "L2 Available: " << (l2_available ? "YES - authenticated" : "NO - requires auth or not supported") << "\r\n";
+    if (!reason.empty())
+    {
+        ss << "Last Reject Reason: " << reason << "\r\n";
+    }
+    ss << "Note: Level2 authentication pending; skip L2 request if unavailable.";
+
+    SetWindowTextA(m_editSymbolInfo, ss.str().c_str());
 }
 
 void DTCTestClientGUI::ClearConsole()
@@ -882,9 +1147,18 @@ void DTCTestClientGUI::HandleDTCResponse(std::unique_ptr<open_dtc_server::core::
     case open_dtc_server::core::dtc::MessageType::SECURITY_DEFINITION_RESPONSE:
     {
         auto *symbol_resp = static_cast<open_dtc_server::core::dtc::SecurityDefinitionResponse *>(message.get());
-        UpdateConsole("Symbol: " + symbol_resp->symbol + " (" + symbol_resp->exchange + ")");
-        UpdateConsole("    Description: " + symbol_resp->description);
-        UpdateConsole("    Min tick: " + std::to_string(symbol_resp->min_price_increment));
+        // Reduce console verbosity: cache info and update panel when relevant
+
+        // Cache the full symbol info for panel usage
+        m_symbolInfoCache[symbol_resp->symbol] = *symbol_resp;
+
+        // Assign a sequential symbol ID since SecurityDefinitionResponse doesn't include one
+        static uint16_t next_symbol_id = 1;
+        uint16_t symbol_id = next_symbol_id++;
+
+        // Store symbol ID mapping for market data subscriptions
+        m_symbolToIdMap[symbol_resp->symbol] = symbol_id;
+        m_idToSymbolMap[symbol_id] = symbol_resp->symbol;
 
         // Add to combo box if not already there
         std::string symbol_text = symbol_resp->symbol;
@@ -902,7 +1176,27 @@ void DTCTestClientGUI::HandleDTCResponse(std::unique_ptr<open_dtc_server::core::
         }
         if (!found)
         {
-            SendMessageA(m_comboSymbols, CB_ADDSTRING, 0, (LPARAM)symbol_text.c_str());
+            // Only add now if not hiding or not delisted yet; if hiding and later becomes delisted, RefreshSymbolCombo will remove
+            if (!(m_hideDelisted && (IsDelisted(symbol_text) || IsLikelyDelisted(symbol_text))))
+            {
+                SendMessageA(m_comboSymbols, CB_ADDSTRING, 0, (LPARAM)symbol_text.c_str());
+            }
+        }
+
+        // If this is the currently selected symbol, refresh info panel
+        if (GetSelectedSymbol() == symbol_resp->symbol)
+        {
+            UpdateSymbolInfoPanel(symbol_resp->symbol);
+        }
+        else
+        {
+            // Minimal log: show count every 20 symbols
+            static int sd_counter = 0;
+            sd_counter++;
+            if (sd_counter % 20 == 0)
+            {
+                UpdateConsole("[INFO] Received " + std::to_string(sd_counter) + " security definitions...");
+            }
         }
         break;
     }
@@ -934,6 +1228,143 @@ void DTCTestClientGUI::HandleDTCResponse(std::unique_ptr<open_dtc_server::core::
         UpdateAccountInfo("Avg Price: " + std::to_string(position_update->average_price));
         UpdateAccountInfo("Trade Account: " + position_update->trade_account);
         UpdateAccountInfo("");
+        break;
+    }
+
+    case open_dtc_server::core::dtc::MessageType::MARKET_DATA_UPDATE_BID_ASK:
+    {
+        auto *bid_ask_update = static_cast<open_dtc_server::core::dtc::MarketDataUpdateBidAsk *>(message.get());
+
+        // Find symbol name from ID
+        std::string symbol_name = "Unknown";
+        auto symbol_it = m_idToSymbolMap.find(bid_ask_update->symbol_id);
+        if (symbol_it != m_idToSymbolMap.end())
+        {
+            symbol_name = symbol_it->second;
+        }
+
+        UpdateConsole("[LIVE MARKET DATA] Bid/Ask Update:");
+        UpdateConsole("  Symbol: " + symbol_name + " (ID: " + std::to_string(bid_ask_update->symbol_id) + ")");
+        UpdateConsole("  Bid: $" + std::to_string(bid_ask_update->bid_price) + " (qty: " + std::to_string(bid_ask_update->bid_quantity) + ")");
+        UpdateConsole("  Ask: $" + std::to_string(bid_ask_update->ask_price) + " (qty: " + std::to_string(bid_ask_update->ask_quantity) + ")");
+
+        // Update the market data display with live data
+        if (m_currentMarketData.is_subscribed && symbol_name != "Unknown")
+        {
+            UpdateMarketData(
+                symbol_name,
+                bid_ask_update->bid_price,
+                bid_ask_update->ask_price,
+                m_currentMarketData.last_price, // Keep existing last price
+                m_currentMarketData.volume      // Keep existing volume
+            );
+        }
+        break;
+    }
+
+    case open_dtc_server::core::dtc::MessageType::MARKET_DATA_UPDATE_TRADE:
+    {
+        auto *trade_update = static_cast<open_dtc_server::core::dtc::MarketDataUpdateTrade *>(message.get());
+
+        // Find symbol name from ID
+        std::string symbol_name = "Unknown";
+        auto symbol_it = m_idToSymbolMap.find(trade_update->symbol_id);
+        if (symbol_it != m_idToSymbolMap.end())
+        {
+            symbol_name = symbol_it->second;
+        }
+
+        UpdateConsole("[LIVE MARKET DATA] Trade Update:");
+        UpdateConsole("  Symbol: " + symbol_name + " (ID: " + std::to_string(trade_update->symbol_id) + ")");
+        UpdateConsole("  Price: $" + std::to_string(trade_update->price));
+        UpdateConsole("  Volume: " + std::to_string(trade_update->volume));
+
+        // Update last price in our market data if we're subscribed
+        if (m_currentMarketData.is_subscribed && symbol_name != "Unknown")
+        {
+            m_currentMarketData.last_price = trade_update->price;
+            m_currentMarketData.volume = trade_update->volume;
+
+            // Update display with current market data
+            UpdateMarketData(
+                symbol_name,
+                m_currentMarketData.bid_price,
+                m_currentMarketData.ask_price,
+                trade_update->price, // Update last price from trade
+                trade_update->volume // Update volume from trade
+            );
+        }
+        break;
+    }
+
+    case open_dtc_server::core::dtc::MessageType::MARKET_DATA_RESPONSE:
+    {
+        auto *md_resp = static_cast<open_dtc_server::core::dtc::MarketDataResponse *>(message.get());
+
+        // Update symbol ID mapping from server-confirmed response
+        if (!md_resp->symbol.empty() && md_resp->symbol_id != 0)
+        {
+            m_symbolToIdMap[md_resp->symbol] = md_resp->symbol_id;
+            m_idToSymbolMap[md_resp->symbol_id] = md_resp->symbol;
+        }
+
+        if (md_resp->result == 1)
+        {
+            UpdateConsole("[SUBSCRIBE] MarketDataResponse SUCCESS for " + md_resp->symbol + " (ID: " + std::to_string(md_resp->symbol_id) + ")");
+            // Reflect status in market data panel
+            SetWindowTextA(m_editMarketData,
+                           ("Subscribed to " + md_resp->symbol + "\r\n\r\nStatus: SUBSCRIBED").c_str());
+        }
+        else
+        {
+            UpdateConsole("[SUBSCRIBE] MarketDataResponse FAILURE for " + md_resp->symbol + " (ID: " + std::to_string(md_resp->symbol_id) + ")");
+        }
+        break;
+    }
+
+    case open_dtc_server::core::dtc::MessageType::MARKET_DATA_REJECT:
+    {
+        auto *md_reject = static_cast<open_dtc_server::core::dtc::MarketDataReject *>(message.get());
+
+        std::string symbol_name = "Unknown";
+        auto it = m_idToSymbolMap.find(md_reject->symbol_id);
+        if (it != m_idToSymbolMap.end())
+        {
+            symbol_name = it->second;
+        }
+
+        UpdateConsole("[REJECT] Market data subscription rejected for " + symbol_name +
+                      " (ID: " + std::to_string(md_reject->symbol_id) + ")");
+        UpdateConsole("Reason: " + md_reject->reject_text);
+
+        // Show rejection in market data panel if this was the active symbol
+        if (m_currentMarketData.symbol == symbol_name || m_currentMarketData.symbol.empty())
+        {
+            SetWindowTextA(m_editMarketData,
+                           ("Subscription REJECTED for " + symbol_name + "\r\n\r\nReason: " + md_reject->reject_text +
+                            "\r\n\r\nStatus: REJECTED")
+                               .c_str());
+            m_currentMarketData.is_subscribed = false;
+        }
+
+        // Track delisted symbols by reason text keywords
+        std::string lowerReason = md_reject->reject_text;
+        std::transform(lowerReason.begin(), lowerReason.end(), lowerReason.begin(), ::tolower);
+        if (lowerReason.find("delisted") != std::string::npos && !symbol_name.empty() && symbol_name != "Unknown")
+        {
+            AddDelistedSymbol(symbol_name);
+            m_lastRejectReason[symbol_name] = md_reject->reject_text;
+            UpdateConsole("Added symbol to delisted set: " + symbol_name);
+            if (m_hideDelisted)
+            {
+                RefreshSymbolCombo();
+            }
+            // Update info panel if current
+            if (GetSelectedSymbol() == symbol_name)
+            {
+                UpdateSymbolInfoPanel(symbol_name);
+            }
+        }
         break;
     }
 

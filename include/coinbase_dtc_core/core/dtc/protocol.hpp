@@ -36,6 +36,9 @@ namespace open_dtc_server
                 MARKET_DATA_UPDATE_LAST_TRADE_SNAPSHOT = 134,
                 MARKET_DATA_UPDATE_BID_ASK = 108,
                 MARKET_DATA_UPDATE_BID_ASK_COMPACT = 117,
+                // Depth of Market (DOM) messages
+                MARKET_DEPTH_SNAPSHOT = 140,
+                MARKET_DEPTH_INCREMENTAL_UPDATE = 146,
                 MARKET_DATA_UPDATE_SESSION_OPEN = 120,
                 MARKET_DATA_UPDATE_SESSION_HIGH = 114,
                 MARKET_DATA_UPDATE_SESSION_LOW = 115,
@@ -312,6 +315,23 @@ namespace open_dtc_server
                 bool deserialize(const uint8_t *data, uint16_t size) override;
             };
 
+            // Market Depth Incremental Update Message (DOM)
+            class MarketDepthIncrementalUpdate : public DTCMessage
+            {
+            public:
+                uint16_t symbol_id = 0;
+                uint8_t side = 0;      // 1 = Bid, 2 = Ask
+                uint16_t position = 0; // Level index (0 = best)
+                double price = 0.0;
+                double size = 0.0;
+                uint64_t date_time = 0;
+
+                MessageType get_type() const override { return MessageType::MARKET_DEPTH_INCREMENTAL_UPDATE; }
+                uint16_t get_size() const override;
+                std::vector<uint8_t> serialize() const override;
+                bool deserialize(const uint8_t *data, uint16_t size) override;
+            };
+
             // Submit New Single Order Message
             class SubmitNewSingleOrder : public DTCMessage
             {
@@ -461,6 +481,14 @@ namespace open_dtc_server
                 uint32_t open_interest = 0;
                 uint64_t roll_over_date = 0;
                 uint8_t is_delayed = 0;
+
+                // Extended fields for richer symbol info
+                std::string display_name;     // e.g., "Bitcoin / USD"
+                uint8_t trading_disabled = 0; // 1 = disabled, 0 = enabled
+                float base_increment = 0.0f;  // base_min_size or increment approximation
+                float quote_increment = 0.0f; // price_increment or quote step
+                std::string base_currency;    // e.g., BTC
+                std::string quote_currency;   // e.g., USD
 
                 MessageType get_type() const override { return MessageType::SECURITY_DEFINITION_RESPONSE; }
                 uint16_t get_size() const override;

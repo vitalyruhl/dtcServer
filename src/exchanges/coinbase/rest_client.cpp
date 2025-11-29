@@ -1,6 +1,6 @@
 #include "coinbase_dtc_core/exchanges/coinbase/rest_client.hpp"
 #include "coinbase_dtc_core/exchanges/coinbase/endpoint.hpp"
-#include "coinbase_dtc_core/core/util/log.hpp"
+#include "coinbase_dtc_core/core/util/advanced_log.hpp"
 #include <curl/curl.h>
 #include <stdexcept>
 #include <sstream>
@@ -30,14 +30,14 @@ namespace open_dtc_server
                 authenticator_ = std::make_unique<auth::JWTAuthenticator>(credentials_);
                 base_url_ = endpoints::TRADE_BASE; // Production by default
 
-                util::simple_log("[COINBASE-REST] Initialized REST client");
+                LOG_INFO("[COINBASE-REST] Initialized REST client");
             }
 
             void CoinbaseRestClient::set_sandbox_mode(bool sandbox)
             {
                 sandbox_mode_ = sandbox;
                 base_url_ = sandbox ? endpoints::SANDBOX_BASE : endpoints::TRADE_BASE;
-                util::simple_log("[COINBASE-REST] Switched to " + std::string(sandbox ? "sandbox" : "production") + " mode");
+                LOG_INFO("[COINBASE-REST] Switched to " + std::string(sandbox ? "sandbox" : "production") + " mode");
             }
 
             void CoinbaseRestClient::set_timeout(int timeout_seconds)
@@ -47,33 +47,33 @@ namespace open_dtc_server
 
             bool CoinbaseRestClient::test_connection()
             {
-                util::simple_log("[COINBASE-REST] Testing connection to: " + base_url_);
+                LOG_INFO("[COINBASE-REST] Testing connection to: " + base_url_);
                 auto response = make_authenticated_request("GET", "time", "");
 
-                util::simple_log("[COINBASE-REST] Connection test result - Status: " + std::to_string(response.status_code) + ", Body: " + response.body + ", Error: " + response.error_message);
+                LOG_INFO("[COINBASE-REST] Connection test result - Status: " + std::to_string(response.status_code) + ", Body: " + response.body + ", Error: " + response.error_message);
 
                 if (response.status_code == 200)
                 {
-                    util::simple_log("[COINBASE-REST] Connection test successful");
+                    LOG_INFO("[COINBASE-REST] Connection test successful");
                     return true;
                 }
                 else
                 {
                     last_error_ = "Connection test failed: HTTP " + std::to_string(response.status_code) + " - " + response.body + " | " + response.error_message;
-                    util::simple_log("[COINBASE-REST] " + last_error_);
+                    LOG_INFO("[COINBASE-REST] " + last_error_);
                     return false;
                 }
             }
             bool CoinbaseRestClient::get_accounts(std::vector<AccountBalance> &accounts)
             {
-                util::simple_log("[COINBASE-REST] Fetching accounts...");
+                LOG_INFO("[COINBASE-REST] Fetching accounts...");
 
                 auto response = make_authenticated_request("GET", "accounts", "");
 
                 if (response.status_code != 200)
                 {
                     last_error_ = "Failed to get accounts: HTTP " + std::to_string(response.status_code) + " - " + response.body;
-                    util::simple_log("[COINBASE-REST] " + last_error_);
+                    LOG_INFO("[COINBASE-REST] " + last_error_);
                     return false;
                 }
 
@@ -82,14 +82,14 @@ namespace open_dtc_server
 
             bool CoinbaseRestClient::get_portfolios(std::vector<Portfolio> &portfolios)
             {
-                util::simple_log("[COINBASE-REST] Fetching portfolios...");
+                LOG_INFO("[COINBASE-REST] Fetching portfolios...");
 
                 auto response = make_authenticated_request("GET", "portfolios", "");
 
                 if (response.status_code != 200)
                 {
                     last_error_ = "Failed to get portfolios: HTTP " + std::to_string(response.status_code) + " - " + response.body;
-                    util::simple_log("[COINBASE-REST] " + last_error_);
+                    LOG_INFO("[COINBASE-REST] " + last_error_);
                     return false;
                 }
 
@@ -98,14 +98,14 @@ namespace open_dtc_server
 
             bool CoinbaseRestClient::get_products(std::vector<std::string> &symbols)
             {
-                util::simple_log("[COINBASE-REST] Fetching available products/symbols...");
+                LOG_INFO("[COINBASE-REST] Fetching available products/symbols...");
 
                 auto response = make_authenticated_request("GET", "market/products", "");
 
                 if (response.status_code != 200)
                 {
                     last_error_ = "Failed to get products: HTTP " + std::to_string(response.status_code) + " - " + response.body;
-                    util::simple_log("[COINBASE-REST] " + last_error_);
+                    LOG_INFO("[COINBASE-REST] " + last_error_);
                     return false;
                 }
 
@@ -114,21 +114,21 @@ namespace open_dtc_server
 
             bool CoinbaseRestClient::get_products_filtered(std::vector<Product> &products, ProductType type)
             {
-                util::simple_log("[COINBASE-REST] *** get_products_filtered CALLED *** Type: " + product_type_to_string(type));
+                LOG_INFO("[COINBASE-REST] *** get_products_filtered CALLED *** Type: " + product_type_to_string(type));
 
-                util::simple_log("[COINBASE-REST] Making authenticated request to market/products...");
+                LOG_INFO("[COINBASE-REST] Making authenticated request to market/products...");
                 auto response = make_authenticated_request("GET", "market/products", "");
 
-                util::simple_log("[COINBASE-REST] API Response - Status Code: " + std::to_string(response.status_code));
+                LOG_INFO("[COINBASE-REST] API Response - Status Code: " + std::to_string(response.status_code));
                 if (response.status_code != 200)
                 {
                     last_error_ = "Failed to get products: HTTP " + std::to_string(response.status_code) + " - " + response.body;
-                    util::simple_log("[COINBASE-REST] *** API ERROR *** " + last_error_);
+                    LOG_INFO("[COINBASE-REST] *** API ERROR *** " + last_error_);
                     return false;
                 }
 
-                util::simple_log("[COINBASE-REST] API SUCCESS - Response body length: " + std::to_string(response.body.length()));
-                util::simple_log("[COINBASE-REST] Response preview: " + response.body.substr(0, 200) + "...");
+                LOG_INFO("[COINBASE-REST] API SUCCESS - Response body length: " + std::to_string(response.body.length()));
+                LOG_INFO("[COINBASE-REST] Response preview: " + response.body.substr(0, 200) + "...");
 
                 return parse_products_filtered_response(response.body, products, type);
             }
@@ -140,13 +140,13 @@ namespace open_dtc_server
                 types.push_back(ProductType::SPOT);
                 types.push_back(ProductType::FUTURE);
 
-                util::simple_log("[COINBASE-REST] Available product types: ALL, SPOT, FUTURE");
+                LOG_INFO("[COINBASE-REST] Available product types: ALL, SPOT, FUTURE");
                 return true;
             }
 
             bool CoinbaseRestClient::get_portfolio_summary(Portfolio &summary)
             {
-                util::simple_log("[COINBASE-REST] Getting portfolio summary...");
+                LOG_INFO("[COINBASE-REST] Getting portfolio summary...");
 
                 // Get all accounts first
                 std::vector<AccountBalance> accounts;
@@ -178,7 +178,7 @@ namespace open_dtc_server
                     }
                 }
 
-                util::simple_log("[COINBASE-REST] Portfolio summary: " + std::to_string(summary.balances.size()) + " accounts, $" + std::to_string(summary.total_value_usd) + " USD value");
+                LOG_INFO("[COINBASE-REST] Portfolio summary: " + std::to_string(summary.balances.size()) + " accounts, $" + std::to_string(summary.total_value_usd) + " USD value");
                 return true;
             }
 
@@ -312,13 +312,13 @@ namespace open_dtc_server
                         }
                     }
 
-                    util::simple_log("[COINBASE-REST] Parsed " + std::to_string(accounts.size()) + " account balances");
+                    LOG_INFO("[COINBASE-REST] Parsed " + std::to_string(accounts.size()) + " account balances");
                     return true;
                 }
                 catch (const std::exception &e)
                 {
                     last_error_ = "JSON parsing error: " + std::string(e.what());
-                    util::simple_log("[COINBASE-REST] " + last_error_);
+                    LOG_INFO("[COINBASE-REST] " + last_error_);
                     return false;
                 }
             }
@@ -346,13 +346,13 @@ namespace open_dtc_server
                         portfolios.push_back(portfolio);
                     }
 
-                    util::simple_log("[COINBASE-REST] Parsed " + std::to_string(portfolios.size()) + " portfolios");
+                    LOG_INFO("[COINBASE-REST] Parsed " + std::to_string(portfolios.size()) + " portfolios");
                     return true;
                 }
                 catch (const std::exception &e)
                 {
                     last_error_ = "JSON parsing error: " + std::string(e.what());
-                    util::simple_log("[COINBASE-REST] " + last_error_);
+                    LOG_INFO("[COINBASE-REST] " + last_error_);
                     return false;
                 }
             }
@@ -382,7 +382,7 @@ namespace open_dtc_server
                         }
                     }
 
-                    util::simple_log("[COINBASE-REST] Parsed " + std::to_string(symbols.size()) + " active trading symbols");
+                    LOG_INFO("[COINBASE-REST] Parsed " + std::to_string(symbols.size()) + " active trading symbols");
                     return true;
                 }
                 catch (const std::exception &e)
@@ -394,23 +394,23 @@ namespace open_dtc_server
 
             bool CoinbaseRestClient::parse_products_filtered_response(const std::string &json, std::vector<Product> &products, ProductType filter_type)
             {
-                util::simple_log("[COINBASE-REST] *** parse_products_filtered_response CALLED ***");
-                util::simple_log("[COINBASE-REST] Filter type: " + product_type_to_string(filter_type));
-                util::simple_log("[COINBASE-REST] JSON length: " + std::to_string(json.length()));
+                LOG_INFO("[COINBASE-REST] *** parse_products_filtered_response CALLED ***");
+                LOG_INFO("[COINBASE-REST] Filter type: " + product_type_to_string(filter_type));
+                LOG_INFO("[COINBASE-REST] JSON length: " + std::to_string(json.length()));
 
                 try
                 {
-                    util::simple_log("[COINBASE-REST] Parsing JSON response...");
+                    LOG_INFO("[COINBASE-REST] Parsing JSON response...");
                     auto parsed = nlohmann::json::parse(json);
 
                     if (!parsed.contains("products"))
                     {
                         last_error_ = "Invalid products response: missing 'products' field";
-                        util::simple_log("[COINBASE-REST] *** JSON ERROR *** " + last_error_);
+                        LOG_INFO("[COINBASE-REST] *** JSON ERROR *** " + last_error_);
                         return false;
                     }
 
-                    util::simple_log("[COINBASE-REST] Found products array with " + std::to_string(parsed["products"].size()) + " items");
+                    LOG_INFO("[COINBASE-REST] Found products array with " + std::to_string(parsed["products"].size()) + " items");
                     products.clear();
                     int processed_count = 0;
                     int filtered_count = 0;
@@ -459,19 +459,19 @@ namespace open_dtc_server
                             filtered_count++;
                             if (filtered_count <= 5)
                             {
-                                util::simple_log("[COINBASE-REST] Added product: " + product_id + " (type: " + product_type_to_string(product.product_type) + ")");
+                                LOG_INFO("[COINBASE-REST] Added product: " + product_id + " (type: " + product_type_to_string(product.product_type) + ")");
                             }
                         }
                     }
 
-                    util::simple_log("[COINBASE-REST] *** PARSING COMPLETE *** Processed: " + std::to_string(processed_count) + ", Filtered: " + std::to_string(filtered_count) + " (" + product_type_to_string(filter_type) + ")");
+                    LOG_INFO("[COINBASE-REST] *** PARSING COMPLETE *** Processed: " + std::to_string(processed_count) + ", Filtered: " + std::to_string(filtered_count) + " (" + product_type_to_string(filter_type) + ")");
                     return true;
                 }
                 catch (const std::exception &e)
                 {
                     last_error_ = "Error parsing filtered products response: " + std::string(e.what());
-                    util::simple_log("[COINBASE-REST] *** PARSE EXCEPTION *** " + last_error_);
-                    util::simple_log("[COINBASE-REST] JSON causing error: " + json.substr(0, 500) + "...");
+                    LOG_INFO("[COINBASE-REST] *** PARSE EXCEPTION *** " + last_error_);
+                    LOG_INFO("[COINBASE-REST] JSON causing error: " + json.substr(0, 500) + "...");
                     return false;
                 }
             }

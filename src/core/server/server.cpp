@@ -2,6 +2,7 @@
 #include "coinbase_dtc_core/core/util/log.hpp"
 #include "coinbase_dtc_core/exchanges/factory/exchange_factory.hpp"
 #include "coinbase_dtc_core/exchanges/coinbase/rest_client.hpp"
+#include "coinbase_dtc_core/exchanges/coinbase/coinbase_feed.hpp"
 #include "coinbase_dtc_core/core/auth/cdp_credentials.hpp"
 #include "coinbase_dtc_core/core/auth/jwt_auth.hpp"
 #include <iostream>
@@ -528,7 +529,7 @@ namespace coinbase_dtc_core
             void DTCServer::on_level2_data(const open_dtc_server::exchanges::base::MarketLevel2 &level2)
             {
                 // Broadcast level2 data to connected clients
-                if (level2.symbol.empty() == false && level2.bid_price > 0)
+                if (level2.symbol.empty() == false)
                 {
                     std::lock_guard<std::mutex> lock(clients_mutex_);
 
@@ -549,18 +550,42 @@ namespace coinbase_dtc_core
                             auto symbol_id_it = client->get_session().symbol_to_id.find(level2.symbol);
                             if (symbol_id_it != client->get_session().symbol_to_id.end())
                             {
-                                // Create bid/ask update message
-                                auto bid_ask_update = protocol.create_bid_ask_update(
-                                    symbol_id_it->second,                                         // symbol_id
-                                    level2.bid_price,                                             // bid_price
-                                    level2.bid_size,                                              // bid_quantity (fixed field name)
-                                    level2.ask_price,                                             // ask_price
-                                    level2.ask_size,                                              // ask_quantity (fixed field name)
-                                    open_dtc_server::core::dtc::Protocol::get_current_timestamp() // timestamp
-                                );
-
-                                auto message_data = protocol.create_message(*bid_ask_update);
-                                client->send_message(message_data);
+                                // If best bid/ask are available, send top-of-book update
+                                if (level2.bid_price > 0.0 || level2.ask_price > 0.0)
+                                {
+                                    auto bid_ask_update = protocol.create_bid_ask_update(
+                                        symbol_id_it->second,
+                                        level2.bid_price,
+                                        static_cast<float>(level2.bid_size),
+                                        level2.ask_price,
+                                        static_cast<float>(level2.ask_size),
+                                        open_dtc_server::core::dtc::Protocol::get_current_timestamp());
+                                    auto message_data = protocol.create_message(*bid_ask_update);
+                                    client->send_message(message_data);
+                                }
+                                // Additionally emit DOM incremental updates per side when sizes are provided
+                                if (level2.bid_price > 0.0 && level2.bid_size >= 0.0)
+                                {
+                                    open_dtc_server::core::dtc::MarketDepthIncrementalUpdate dom;
+                                    dom.symbol_id = symbol_id_it->second;
+                                    dom.side = 1;     // Bid
+                                    dom.position = 0; // Best level for now
+                                    dom.price = level2.bid_price;
+                                    dom.size = level2.bid_size;
+                                    dom.date_time = open_dtc_server::core::dtc::Protocol::get_current_timestamp();
+                                    client->send_message(dom.serialize());
+                                }
+                                if (level2.ask_price > 0.0 && level2.ask_size >= 0.0)
+                                {
+                                    open_dtc_server::core::dtc::MarketDepthIncrementalUpdate dom;
+                                    dom.symbol_id = symbol_id_it->second;
+                                    dom.side = 2;     // Ask
+                                    dom.position = 0; // Best level for now
+                                    dom.price = level2.ask_price;
+                                    dom.size = level2.ask_size;
+                                    dom.date_time = open_dtc_server::core::dtc::Protocol::get_current_timestamp();
+                                    client->send_message(dom.serialize());
+                                }
                                 broadcasts++;
                             }
                         }
@@ -568,7 +593,7 @@ namespace coinbase_dtc_core
 
                     if (broadcasts > 0)
                     {
-                        std::cout << "[LEVEL2] Level2 broadcasted: " + level2.symbol + " Bid=$" + std::to_string(level2.bid_price) + " Ask=$" + std::to_string(level2.ask_price) + " to " + std::to_string(broadcasts) + " clients" << std::endl;
+                        std::cout << "[LEVEL2] Level2 broadcasted: " + level2.symbol + " Bid=$" + std::to_string(level2.bid_price) + " Ask=$" + std::to_string(level2.ask_price) + " (DOM incremental emitted) to " + std::to_string(broadcasts) + " clients" << std::endl;
                     }
                 }
             }
@@ -660,6 +685,11 @@ namespace coinbase_dtc_core
                         // Extract symbols from products
                         for (const auto &product : products)
                         {
+                            // Skip symbols previously marked delisted
+                            if (is_delisted(product.product_id))
+                            {
+                                continue;
+                            }
                             symbols.push_back(product.product_id);
                         }
 
@@ -690,8 +720,34 @@ namespace coinbase_dtc_core
                     std::cout << "[DTC-SERVER] Sending " << symbols.size() << " SecurityDefinitionResponse messages..." << std::endl;
                     for (const auto &symbol : symbols)
                     {
+                        // Find product details for this symbol
+                        const open_dtc_server::exchanges::coinbase::Product *pinfo = nullptr;
+                        for (const auto &p : products)
+                        {
+                            if (p.product_id == symbol)
+                            {
+                                pinfo = &p;
+                                break;
+                            }
+                        }
+
                         auto symbol_response = protocol.create_security_definition_response(
                             symbol_req->request_id, symbol, "coinbase");
+
+                        if (pinfo)
+                        {
+                            // Populate extended fields
+                            symbol_response->display_name = pinfo->display_name;
+                            symbol_response->trading_disabled = pinfo->trading_disabled ? 1 : 0;
+                            symbol_response->min_price_increment = static_cast<float>(pinfo->price_increment);
+                            symbol_response->base_increment = static_cast<float>(pinfo->base_min_size);
+                            symbol_response->quote_increment = static_cast<float>(pinfo->price_increment);
+                            symbol_response->base_currency = pinfo->base_currency;
+                            symbol_response->quote_currency = pinfo->quote_currency;
+                            symbol_response->currency = pinfo->quote_currency;
+                            symbol_response->has_market_depth_data = 1; // L2 requires auth; server has credentials configured
+                            symbol_response->description = pinfo->status.empty() ? (symbol + " on coinbase") : (pinfo->status + ": " + symbol);
+                        }
 
                         auto response_data = protocol.create_message(*symbol_response);
                         client->send_message(response_data);
@@ -712,7 +768,7 @@ namespace coinbase_dtc_core
 
                     bool success = false;
 
-                    // Add symbol to client's subscription list
+                    // Add symbol to client's subscription list only if subscription succeeds
                     if (market_req->request_action == open_dtc_server::core::dtc::RequestAction::SUBSCRIBE)
                     {
                         // Assign symbol ID if not provided
@@ -725,18 +781,57 @@ namespace coinbase_dtc_core
                         client->get_session().symbol_to_id[market_req->symbol] = market_req->symbol_id;
                         client->get_session().id_to_symbol[market_req->symbol_id] = market_req->symbol;
 
-                        // Add to subscriptions
-                        auto &subscriptions = client->get_session().subscribed_symbols;
-                        if (std::find(subscriptions.begin(), subscriptions.end(), market_req->symbol) == subscriptions.end())
+                        // Subscribe to Coinbase WebSocket for this specific symbol
+                        std::lock_guard<std::mutex> lock(exchanges_mutex_);
+                        auto feed_it = exchange_feeds_.find("coinbase");
+                        if (feed_it != exchange_feeds_.end())
                         {
-                            subscriptions.push_back(market_req->symbol);
+                            auto coinbase_feed = dynamic_cast<open_dtc_server::exchanges::coinbase::CoinbaseFeed *>(feed_it->second.get());
+                            if (coinbase_feed)
+                            {
+                                // Subscribe to trades (primary) and attempt level2 (optional)
+                                bool trades_subscribed = coinbase_feed->subscribe_trades(market_req->symbol);
+                                bool level2_subscribed = coinbase_feed->subscribe_level2(market_req->symbol);
+
+                                if (trades_subscribed)
+                                {
+                                    // Add to subscriptions if trades succeeded
+                                    auto &subscriptions = client->get_session().subscribed_symbols;
+                                    if (std::find(subscriptions.begin(), subscriptions.end(), market_req->symbol) == subscriptions.end())
+                                    {
+                                        subscriptions.push_back(market_req->symbol);
+                                    }
+                                    std::cout << "[DTC-SERVER] *** SUBSCRIPTION SUCCESS (TRADES) *** Client " << client->get_client_id() << " subscribed to " << market_req->symbol << " (ID: " << market_req->symbol_id << ")" << std::endl;
+                                    if (!level2_subscribed)
+                                    {
+                                        std::cout << "[DTC-SERVER] Level2 subscription not available (permissions/channel). Continuing with ticker-derived bid/ask." << std::endl;
+                                        // TODO(LEVEL2-AUTH): Implement authenticated level2 subscribe once Advanced Trade WebSocket spec integrated.
+                                        // Expected: signed subscribe payload including key id, timestamp/nonce, signature.
+                                        // Store pending level2 request state for future upgrade.
+                                    }
+                                    success = true;
+                                }
+                                else
+                                {
+                                    std::cout << "[DTC-SERVER] Failed to subscribe to trades for " << market_req->symbol << std::endl;
+                                    success = false; // Mark subscription as failed
+                                    // Heuristic: mark USDC base pairs delisted (until detailed reason available)
+                                    if (market_req->symbol.find("-USDC") != std::string::npos)
+                                    {
+                                        mark_delisted(market_req->symbol);
+                                        std::cout << "[DTC-SERVER] Marked symbol as delisted: " << market_req->symbol << std::endl;
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                std::cout << "[ERROR] Failed to cast to CoinbaseFeed" << std::endl;
+                            }
                         }
-
-                        std::cout << "[DTC-SERVER] *** SUBSCRIPTION SUCCESS *** Client " << client->get_client_id() << " subscribed to " << market_req->symbol << " (ID: " << market_req->symbol_id << ")" << std::endl;
-                        success = true;
-
-                        // TODO: Subscribe to Coinbase WebSocket for this specific symbol
-                        std::cout << "[TODO] Subscribe to Coinbase WebSocket for " << market_req->symbol << std::endl;
+                        else
+                        {
+                            std::cout << "[WARNING] Coinbase feed not found for subscription" << std::endl;
+                        }
                     }
                     else if (market_req->request_action == open_dtc_server::core::dtc::RequestAction::UNSUBSCRIBE)
                     {
@@ -747,18 +842,55 @@ namespace coinbase_dtc_core
                         std::cout << "[DTC-SERVER] Client " << client->get_client_id() << " unsubscribed from " << market_req->symbol << std::endl;
                         success = true;
 
-                        // TODO: Unsubscribe from Coinbase WebSocket for this symbol
-                        std::cout << "[TODO] Unsubscribe from Coinbase WebSocket for " << market_req->symbol << std::endl;
+                        // Unsubscribe from Coinbase WebSocket for this symbol
+                        std::lock_guard<std::mutex> lock(exchanges_mutex_);
+                        auto feed_it = exchange_feeds_.find("coinbase");
+                        if (feed_it != exchange_feeds_.end())
+                        {
+                            auto coinbase_feed = dynamic_cast<open_dtc_server::exchanges::coinbase::CoinbaseFeed *>(feed_it->second.get());
+                            if (coinbase_feed)
+                            {
+                                // Unsubscribe from both trades and level2 for the symbol
+                                coinbase_feed->unsubscribe(market_req->symbol);
+                                coinbase_feed->unsubscribe(market_req->symbol + "_level2");
+                                std::cout << "[DTC-SERVER] Unsubscribed from Coinbase WebSocket for " << market_req->symbol << std::endl;
+                            }
+                            else
+                            {
+                                std::cout << "[ERROR] Failed to cast to CoinbaseFeed for unsubscribe" << std::endl;
+                            }
+                        }
+                        else
+                        {
+                            std::cout << "[WARNING] Coinbase feed not found for unsubscribe" << std::endl;
+                        }
                     }
 
                     // Send MarketDataResponse
-                    auto market_response = protocol.create_market_data_response(
-                        market_req->symbol_id, market_req->symbol, market_req->exchange, success);
-
-                    auto response_data = protocol.create_message(*market_response);
-                    client->send_message(response_data);
-
-                    std::cout << "[DTC-SERVER] *** MarketDataResponse SENT *** Result: " << (success ? "SUCCESS" : "FAILURE") << std::endl;
+                    if (success)
+                    {
+                        auto market_response = protocol.create_market_data_response(
+                            market_req->symbol_id, market_req->symbol, market_req->exchange, true);
+                        auto response_data = protocol.create_message(*market_response);
+                        client->send_message(response_data);
+                        std::cout << "[DTC-SERVER] *** MarketDataResponse SENT *** Result: SUCCESS" << std::endl;
+                    }
+                    else
+                    {
+                        // Send MarketDataReject with error details
+                        auto market_reject = std::make_unique<open_dtc_server::core::dtc::MarketDataReject>();
+                        market_reject->symbol_id = market_req->symbol_id;
+                        market_reject->reject_text = "Coinbase subscription failed: symbol is delisted, invalid, or missing required permissions.";
+                        auto reject_data = protocol.create_message(*market_reject);
+                        client->send_message(reject_data);
+                        std::cout << "[DTC-SERVER] *** MarketDataReject SENT ***" << std::endl;
+                        // Record delisted if pattern matches
+                        if (market_req->symbol.find("-USDC") != std::string::npos)
+                        {
+                            mark_delisted(market_req->symbol);
+                            std::cout << "[DTC-SERVER] Added to delisted filter set via reject: " << market_req->symbol << std::endl;
+                        }
+                    }
                     break;
                 }
 
