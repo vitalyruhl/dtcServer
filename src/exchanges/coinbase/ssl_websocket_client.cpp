@@ -957,10 +957,22 @@ namespace open_dtc_server
 
             bool SSLWebSocketClient::subscribe_to_level2(const std::vector<std::string> &symbols)
             {
+                // Include auth fields when credentials are loaded
                 nlohmann::json subscribe_message = {
                     {"type", "subscribe"},
                     {"channels", nlohmann::json::array({{{"name", "level2"},
                                                          {"product_ids", symbols}}})}};
+
+                if (credentials_loaded_)
+                {
+                    // Coinbase Advanced Trade requires a JWT signature and key_id/timestamp
+                    std::string jwt_token = generate_jwt_token();
+                    subscribe_message["signature"] = jwt_token;
+                    subscribe_message["key"] = api_key_id_;
+                    subscribe_message["timestamp"] = std::chrono::duration_cast<std::chrono::seconds>(
+                                                         std::chrono::system_clock::now().time_since_epoch())
+                                                         .count();
+                }
 
                 return send_message(subscribe_message.dump());
             }

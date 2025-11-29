@@ -148,4 +148,7 @@ private:
     // Last reject reason per symbol
     std::map<std::string, std::string> m_lastRejectReason;
     void UpdateSymbolInfoPanel(const std::string &symbol);
+
+    // Cache of latest SecurityDefinitionResponse per symbol for richer panel info
+    std::map<std::string, open_dtc_server::core::dtc::SecurityDefinitionResponse> m_symbolInfoCache;
 };

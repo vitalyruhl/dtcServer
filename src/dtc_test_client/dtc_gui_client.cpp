@@ -610,16 +610,8 @@ void DTCTestClientGUI::GetSymbolInfo()
         return;
     }
 
-    UpdateConsole("Getting symbol info for: " + symbol);
-
-    // TODO: Implement actual DTC symbol info request
-    UpdateConsole("Symbol Info for " + symbol + ":");
-    UpdateConsole("   Full Name: " + symbol);
-    UpdateConsole("   Base Currency: " + symbol.substr(0, symbol.find('-')));
-    UpdateConsole("   Quote Currency: " + symbol.substr(symbol.find('-') + 1));
-    UpdateConsole("   [MOCKED DATA] Min Order Size: 0.001");
-    UpdateConsole("   [MOCKED DATA] Max Order Size: 10000");
-    UpdateConsole("   [MOCKED DATA] Price Increment: 0.01");
+    // Use cached SecurityDefinition info and update the panel; no mocked console spam
+    UpdateSymbolInfoPanel(symbol);
 }
 
 void DTCTestClientGUI::GetDOMData()
@@ -934,7 +926,7 @@ void DTCTestClientGUI::UpdateSymbolInfoPanel(const std::string &symbol)
     }
 
     bool delisted = IsDelisted(symbol) || IsLikelyDelisted(symbol);
-    bool l2_available = false; // Until authenticated L2 is implemented, report unavailable
+    bool l2_available = false;
     std::string reason = "";
     auto it = m_lastRejectReason.find(symbol);
     if (it != m_lastRejectReason.end())
@@ -943,13 +935,40 @@ void DTCTestClientGUI::UpdateSymbolInfoPanel(const std::string &symbol)
     std::stringstream ss;
     ss << "Symbol: " << symbol << "\r\n";
     ss << "Exchange: coinbase\r\n";
+
+    // Show cached SecurityDefinition details if available
+    auto infoIt = m_symbolInfoCache.find(symbol);
+    if (infoIt != m_symbolInfoCache.end())
+    {
+        const auto &info = infoIt->second;
+        if (!info.display_name.empty())
+        {
+            ss << "Display Name: " << info.display_name << "\r\n";
+        }
+        if (!info.base_currency.empty() || !info.quote_currency.empty())
+        {
+            ss << "Base/Quote: " << (info.base_currency.empty() ? "?" : info.base_currency)
+               << " / " << (info.quote_currency.empty() ? "?" : info.quote_currency) << "\r\n";
+        }
+        ss << "Trading Disabled: " << (info.trading_disabled ? "YES" : "NO") << "\r\n";
+        ss << "Min Tick: " << std::fixed << std::setprecision(8) << info.min_price_increment << "\r\n";
+        ss << "Base Increment: " << std::fixed << std::setprecision(8) << info.base_increment << "\r\n";
+        ss << "Quote Increment: " << std::fixed << std::setprecision(8) << info.quote_increment << "\r\n";
+
+        // Interpret has_market_depth_data as L2 availability when auth is present
+        l2_available = (info.has_market_depth_data != 0);
+    }
+    else
+    {
+        ss << "Min Tick: (not provided)\r\n";
+    }
+
     ss << "Delisted: " << (delisted ? "YES" : "NO") << "\r\n";
-    ss << "L2 Available: " << (l2_available ? "YES" : "NO - requires auth or not supported") << "\r\n";
+    ss << "L2 Available: " << (l2_available ? "YES - authenticated" : "NO - requires auth or not supported") << "\r\n";
     if (!reason.empty())
     {
         ss << "Last Reject Reason: " << reason << "\r\n";
     }
-    ss << "Min Tick: (from SecurityDefinition when available)\r\n";
     ss << "Note: Level2 authentication pending; skip L2 request if unavailable.";
 
     SetWindowTextA(m_editSymbolInfo, ss.str().c_str());
@@ -1128,8 +1147,10 @@ void DTCTestClientGUI::HandleDTCResponse(std::unique_ptr<open_dtc_server::core::
     case open_dtc_server::core::dtc::MessageType::SECURITY_DEFINITION_RESPONSE:
     {
         auto *symbol_resp = static_cast<open_dtc_server::core::dtc::SecurityDefinitionResponse *>(message.get());
-        UpdateConsole("Symbol: " + symbol_resp->symbol + " (" + symbol_resp->exchange + ") - Description: " + symbol_resp->description);
-        UpdateConsole("    Min tick: " + std::to_string(symbol_resp->min_price_increment));
+        // Reduce console verbosity: cache info and update panel when relevant
+
+        // Cache the full symbol info for panel usage
+        m_symbolInfoCache[symbol_resp->symbol] = *symbol_resp;
 
         // Assign a sequential symbol ID since SecurityDefinitionResponse doesn't include one
         static uint16_t next_symbol_id = 1;
@@ -1159,6 +1180,22 @@ void DTCTestClientGUI::HandleDTCResponse(std::unique_ptr<open_dtc_server::core::
             if (!(m_hideDelisted && (IsDelisted(symbol_text) || IsLikelyDelisted(symbol_text))))
             {
                 SendMessageA(m_comboSymbols, CB_ADDSTRING, 0, (LPARAM)symbol_text.c_str());
+            }
+        }
+
+        // If this is the currently selected symbol, refresh info panel
+        if (GetSelectedSymbol() == symbol_resp->symbol)
+        {
+            UpdateSymbolInfoPanel(symbol_resp->symbol);
+        }
+        else
+        {
+            // Minimal log: show count every 20 symbols
+            static int sd_counter = 0;
+            sd_counter++;
+            if (sd_counter % 20 == 0)
+            {
+                UpdateConsole("[INFO] Received " + std::to_string(sd_counter) + " security definitions...");
             }
         }
         break;

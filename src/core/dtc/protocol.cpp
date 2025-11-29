@@ -483,7 +483,12 @@ namespace open_dtc_server
                        currency.length() + 1 +                    // currency + null terminator
                        sizeof(uint32_t) +                         // security_type
                        sizeof(float) * 4 +                        // price increments, contract_size
-                       sizeof(uint8_t);                           // has_market_depth_data
+                       sizeof(uint8_t) +                          // has_market_depth_data
+                       display_name.length() + 1 +                // extended: display_name
+                       sizeof(uint8_t) +                          // extended: trading_disabled
+                       sizeof(float) * 2 +                        // extended: base_increment, quote_increment
+                       base_currency.length() + 1 +               // extended: base_currency
+                       quote_currency.length() + 1;               // extended: quote_currency
             }
 
             std::vector<uint8_t> SecurityDefinitionResponse::serialize() const
@@ -530,6 +535,24 @@ namespace open_dtc_server
 
                 // Write has_market_depth_data
                 std::memcpy(ptr, &has_market_depth_data, sizeof(uint8_t));
+                ptr += sizeof(uint8_t);
+
+                // Extended fields
+                std::memcpy(ptr, display_name.c_str(), display_name.length() + 1);
+                ptr += display_name.length() + 1;
+
+                std::memcpy(ptr, &trading_disabled, sizeof(uint8_t));
+                ptr += sizeof(uint8_t);
+
+                std::memcpy(ptr, &base_increment, sizeof(float));
+                ptr += sizeof(float);
+                std::memcpy(ptr, &quote_increment, sizeof(float));
+                ptr += sizeof(float);
+
+                std::memcpy(ptr, base_currency.c_str(), base_currency.length() + 1);
+                ptr += base_currency.length() + 1;
+                std::memcpy(ptr, quote_currency.c_str(), quote_currency.length() + 1);
+                ptr += quote_currency.length() + 1;
 
                 return buffer;
             }
@@ -611,6 +634,46 @@ namespace open_dtc_server
                 ptr += sizeof(float);
 
                 std::memcpy(&has_market_depth_data, ptr, sizeof(uint8_t));
+                ptr += sizeof(uint8_t);
+
+                // Extended fields
+                {
+                    const char *dn_start = reinterpret_cast<const char *>(ptr);
+                    size_t dn_len = strnlen(dn_start, size - (ptr - data));
+                    if (dn_len == size - (ptr - data))
+                        return false;
+                    display_name.assign(dn_start, dn_len);
+                    ptr += dn_len + 1;
+                }
+
+                if (size - (ptr - data) < sizeof(uint8_t))
+                    return false;
+                std::memcpy(&trading_disabled, ptr, sizeof(uint8_t));
+                ptr += sizeof(uint8_t);
+
+                if (size - (ptr - data) < sizeof(float) * 2)
+                    return false;
+                std::memcpy(&base_increment, ptr, sizeof(float));
+                ptr += sizeof(float);
+                std::memcpy(&quote_increment, ptr, sizeof(float));
+                ptr += sizeof(float);
+
+                {
+                    const char *bc_start = reinterpret_cast<const char *>(ptr);
+                    size_t bc_len = strnlen(bc_start, size - (ptr - data));
+                    if (bc_len == size - (ptr - data))
+                        return false;
+                    base_currency.assign(bc_start, bc_len);
+                    ptr += bc_len + 1;
+                }
+                {
+                    const char *qc_start = reinterpret_cast<const char *>(ptr);
+                    size_t qc_len = strnlen(qc_start, size - (ptr - data));
+                    if (qc_len == size - (ptr - data))
+                        return false;
+                    quote_currency.assign(qc_start, qc_len);
+                    ptr += qc_len + 1;
+                }
 
                 return true;
             }
@@ -683,6 +746,15 @@ namespace open_dtc_server
                 case MessageType::MARKET_DATA_UPDATE_BID_ASK:
                 {
                     auto msg = std::make_unique<MarketDataUpdateBidAsk>();
+                    if (msg->deserialize(data, header->size))
+                    {
+                        return std::move(msg);
+                    }
+                    break;
+                }
+                case MessageType::MARKET_DEPTH_INCREMENTAL_UPDATE:
+                {
+                    auto msg = std::make_unique<MarketDepthIncrementalUpdate>();
                     if (msg->deserialize(data, header->size))
                     {
                         return std::move(msg);
@@ -983,6 +1055,73 @@ namespace open_dtc_server
                 // Read reject_text (null-terminated)
                 const char *text_ptr = reinterpret_cast<const char *>(ptr);
                 reject_text = std::string(text_ptr);
+                return true;
+            }
+
+            // =====================
+            // MarketDepthIncrementalUpdate implementation
+            // =====================
+            uint16_t MarketDepthIncrementalUpdate::get_size() const
+            {
+                return sizeof(MessageHeader) + sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(double) + sizeof(double) + sizeof(uint64_t);
+            }
+
+            std::vector<uint8_t> MarketDepthIncrementalUpdate::serialize() const
+            {
+                uint16_t total_size = get_size();
+                std::vector<uint8_t> buffer(total_size);
+                size_t offset = 0;
+
+                MessageHeader header(total_size, get_type());
+                std::memcpy(buffer.data() + offset, &header, sizeof(MessageHeader));
+                offset += sizeof(MessageHeader);
+
+                std::memcpy(buffer.data() + offset, &symbol_id, sizeof(uint16_t));
+                offset += sizeof(uint16_t);
+
+                std::memcpy(buffer.data() + offset, &side, sizeof(uint8_t));
+                offset += sizeof(uint8_t);
+
+                std::memcpy(buffer.data() + offset, &position, sizeof(uint16_t));
+                offset += sizeof(uint16_t);
+
+                std::memcpy(buffer.data() + offset, &price, sizeof(double));
+                offset += sizeof(double);
+
+                std::memcpy(buffer.data() + offset, &size, sizeof(double));
+                offset += sizeof(double);
+
+                std::memcpy(buffer.data() + offset, &date_time, sizeof(uint64_t));
+                offset += sizeof(uint64_t);
+
+                return buffer;
+            }
+
+            bool MarketDepthIncrementalUpdate::deserialize(const uint8_t *data, uint16_t size)
+            {
+                if (!data || size < get_size())
+                    return false;
+
+                size_t offset = sizeof(MessageHeader);
+
+                std::memcpy(&symbol_id, data + offset, sizeof(uint16_t));
+                offset += sizeof(uint16_t);
+
+                std::memcpy(&side, data + offset, sizeof(uint8_t));
+                offset += sizeof(uint8_t);
+
+                std::memcpy(&position, data + offset, sizeof(uint16_t));
+                offset += sizeof(uint16_t);
+
+                std::memcpy(&price, data + offset, sizeof(double));
+                offset += sizeof(double);
+
+                std::memcpy(&size, data + offset, sizeof(double));
+                offset += sizeof(double);
+
+                std::memcpy(&date_time, data + offset, sizeof(uint64_t));
+                offset += sizeof(uint64_t);
+
                 return true;
             }
 

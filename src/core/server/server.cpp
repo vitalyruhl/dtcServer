@@ -529,7 +529,7 @@ namespace coinbase_dtc_core
             void DTCServer::on_level2_data(const open_dtc_server::exchanges::base::MarketLevel2 &level2)
             {
                 // Broadcast level2 data to connected clients
-                if (level2.symbol.empty() == false && level2.bid_price > 0)
+                if (level2.symbol.empty() == false)
                 {
                     std::lock_guard<std::mutex> lock(clients_mutex_);
 
@@ -550,18 +550,42 @@ namespace coinbase_dtc_core
                             auto symbol_id_it = client->get_session().symbol_to_id.find(level2.symbol);
                             if (symbol_id_it != client->get_session().symbol_to_id.end())
                             {
-                                // Create bid/ask update message
-                                auto bid_ask_update = protocol.create_bid_ask_update(
-                                    symbol_id_it->second,                                         // symbol_id
-                                    level2.bid_price,                                             // bid_price
-                                    level2.bid_size,                                              // bid_quantity (fixed field name)
-                                    level2.ask_price,                                             // ask_price
-                                    level2.ask_size,                                              // ask_quantity (fixed field name)
-                                    open_dtc_server::core::dtc::Protocol::get_current_timestamp() // timestamp
-                                );
-
-                                auto message_data = protocol.create_message(*bid_ask_update);
-                                client->send_message(message_data);
+                                // If best bid/ask are available, send top-of-book update
+                                if (level2.bid_price > 0.0 || level2.ask_price > 0.0)
+                                {
+                                    auto bid_ask_update = protocol.create_bid_ask_update(
+                                        symbol_id_it->second,
+                                        level2.bid_price,
+                                        static_cast<float>(level2.bid_size),
+                                        level2.ask_price,
+                                        static_cast<float>(level2.ask_size),
+                                        open_dtc_server::core::dtc::Protocol::get_current_timestamp());
+                                    auto message_data = protocol.create_message(*bid_ask_update);
+                                    client->send_message(message_data);
+                                }
+                                // Additionally emit DOM incremental updates per side when sizes are provided
+                                if (level2.bid_price > 0.0 && level2.bid_size >= 0.0)
+                                {
+                                    open_dtc_server::core::dtc::MarketDepthIncrementalUpdate dom;
+                                    dom.symbol_id = symbol_id_it->second;
+                                    dom.side = 1;     // Bid
+                                    dom.position = 0; // Best level for now
+                                    dom.price = level2.bid_price;
+                                    dom.size = level2.bid_size;
+                                    dom.date_time = open_dtc_server::core::dtc::Protocol::get_current_timestamp();
+                                    client->send_message(dom.serialize());
+                                }
+                                if (level2.ask_price > 0.0 && level2.ask_size >= 0.0)
+                                {
+                                    open_dtc_server::core::dtc::MarketDepthIncrementalUpdate dom;
+                                    dom.symbol_id = symbol_id_it->second;
+                                    dom.side = 2;     // Ask
+                                    dom.position = 0; // Best level for now
+                                    dom.price = level2.ask_price;
+                                    dom.size = level2.ask_size;
+                                    dom.date_time = open_dtc_server::core::dtc::Protocol::get_current_timestamp();
+                                    client->send_message(dom.serialize());
+                                }
                                 broadcasts++;
                             }
                         }
@@ -569,7 +593,7 @@ namespace coinbase_dtc_core
 
                     if (broadcasts > 0)
                     {
-                        std::cout << "[LEVEL2] Level2 broadcasted: " + level2.symbol + " Bid=$" + std::to_string(level2.bid_price) + " Ask=$" + std::to_string(level2.ask_price) + " to " + std::to_string(broadcasts) + " clients" << std::endl;
+                        std::cout << "[LEVEL2] Level2 broadcasted: " + level2.symbol + " Bid=$" + std::to_string(level2.bid_price) + " Ask=$" + std::to_string(level2.ask_price) + " (DOM incremental emitted) to " + std::to_string(broadcasts) + " clients" << std::endl;
                     }
                 }
             }
@@ -696,8 +720,34 @@ namespace coinbase_dtc_core
                     std::cout << "[DTC-SERVER] Sending " << symbols.size() << " SecurityDefinitionResponse messages..." << std::endl;
                     for (const auto &symbol : symbols)
                     {
+                        // Find product details for this symbol
+                        const open_dtc_server::exchanges::coinbase::Product *pinfo = nullptr;
+                        for (const auto &p : products)
+                        {
+                            if (p.product_id == symbol)
+                            {
+                                pinfo = &p;
+                                break;
+                            }
+                        }
+
                         auto symbol_response = protocol.create_security_definition_response(
                             symbol_req->request_id, symbol, "coinbase");
+
+                        if (pinfo)
+                        {
+                            // Populate extended fields
+                            symbol_response->display_name = pinfo->display_name;
+                            symbol_response->trading_disabled = pinfo->trading_disabled ? 1 : 0;
+                            symbol_response->min_price_increment = static_cast<float>(pinfo->price_increment);
+                            symbol_response->base_increment = static_cast<float>(pinfo->base_min_size);
+                            symbol_response->quote_increment = static_cast<float>(pinfo->price_increment);
+                            symbol_response->base_currency = pinfo->base_currency;
+                            symbol_response->quote_currency = pinfo->quote_currency;
+                            symbol_response->currency = pinfo->quote_currency;
+                            symbol_response->has_market_depth_data = 1; // L2 requires auth; server has credentials configured
+                            symbol_response->description = pinfo->status.empty() ? (symbol + " on coinbase") : (pinfo->status + ": " + symbol);
+                        }
 
                         auto response_data = protocol.create_message(*symbol_response);
                         client->send_message(response_data);
