@@ -12,6 +12,7 @@
 #include <map>
 #include <unordered_set>
 #include "coinbase_dtc_core/core/dtc/protocol.hpp"
+#include <fstream>
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "ws2_32.lib")
@@ -81,8 +82,14 @@ private:
     void UpdateStatus(const std::string &status);
     void UpdateAccountInfo(const std::string &info);
     void UpdateMarketData(const std::string &symbol, double bid, double ask, double last, double volume); // NEW
+    void UpdateDOMPanelDisplay(const std::string &symbol);
+    void RenderMarketDataPanel(const std::string &symbol);
     void ClearConsole();
     std::string GetSelectedSymbol();
+    void InitGuiLogger();
+    void WriteGuiLog(const std::string &line);
+    std::string GetExecutableDir();
+    void RotateGuiLogsIfNeeded();
 
     // Network functions
     bool SendDTCMessage(const std::vector<uint8_t> &message);
@@ -90,6 +97,7 @@ private:
     void ProcessDTCMessages();
     void HandleDTCResponse(std::unique_ptr<open_dtc_server::core::dtc::DTCMessage> message);
     void GetRealAccountData();
+    void UpdateDOMFromIncrement(uint16_t symbol_id, uint8_t side, uint16_t position, double price, double size, uint64_t ts);
 
     // Window and control handles
     HWND m_hwnd = nullptr;
@@ -133,6 +141,9 @@ private:
         bool is_subscribed = false;
     } m_currentMarketData;
 
+    // Feature flags
+    bool m_enableMockData = false;
+
     // Symbol to ID mapping for market data subscriptions
     std::map<std::string, uint16_t> m_symbolToIdMap;
     std::map<uint16_t, std::string> m_idToSymbolMap;
@@ -151,4 +162,19 @@ private:
 
     // Cache of latest SecurityDefinitionResponse per symbol for richer panel info
     std::map<std::string, open_dtc_server::core::dtc::SecurityDefinitionResponse> m_symbolInfoCache;
+
+    // DOM (Depth of Market) storage keyed by DTC symbol_id
+    struct DOMBook
+    {
+        std::vector<std::pair<double, double>> bids; // index = position, value = {price, size}
+        std::vector<std::pair<double, double>> asks; // index = position, value = {price, size}
+        uint64_t last_update_ts = 0;
+    };
+    std::map<uint16_t, DOMBook> m_domBooks;
+
+    // GUI logging (independent file logger with rotation)
+    std::string m_guiLogPath;
+    std::ofstream m_guiLogFile;
+    size_t m_guiMaxSizeBytes = 50ull * 1024ull * 1024ull; // 50MB
+    int m_guiMaxBackups = 5;
 };

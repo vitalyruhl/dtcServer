@@ -1,9 +1,10 @@
 #include "dtc_gui_client.hpp"
-#include "coinbase_dtc_core/core/util/log.hpp"
+#include "coinbase_dtc_core/core/util/advanced_log.hpp"
 #include <sstream>
 #include <iomanip>
 #include <chrono>
 #include <algorithm>
+#include <fstream>
 
 DTCTestClientGUI::DTCTestClientGUI()
 {
@@ -13,6 +14,11 @@ DTCTestClientGUI::DTCTestClientGUI()
     {
         MessageBoxA(nullptr, "Failed to initialize Winsock", "Error", MB_ICONERROR);
     }
+    // Initialize shared advanced logger for GUI section
+    InitGuiLogger();
+    WriteGuiLog("[START] dtc_gui_client started");
+    // Mock data disabled by default per project policy
+    m_enableMockData = false;
 }
 
 void DTCTestClientGUI::RefreshSymbolCombo()
@@ -331,6 +337,14 @@ void DTCTestClientGUI::OnCreate(HWND hwnd)
                                   WS_VISIBLE | WS_CHILD | WS_BORDER | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY,
                                   x, y, console_width, 200, hwnd, (HMENU)ID_EDIT_CONSOLE, m_hInstance, nullptr);
 
+    // Market Data Panel (left below console)
+    CreateWindowA("STATIC", "Market Data:", WS_VISIBLE | WS_CHILD,
+                  x, y + 205, 100, 20, hwnd, nullptr, m_hInstance, nullptr);
+
+    m_editMarketData = CreateWindowA("EDIT", "No market data subscription\r\n\r\nSelect a symbol and click 'Subscribe' to see live data",
+                                     WS_VISIBLE | WS_CHILD | WS_BORDER | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY,
+                                     x, y + 225, console_width, 190, hwnd, nullptr, m_hInstance, nullptr);
+
     // Account Info Panel
     CreateWindowA("STATIC", "Account Information:", WS_VISIBLE | WS_CHILD,
                   account_info_x, y - 25, 150, 20, hwnd, nullptr, m_hInstance, nullptr);
@@ -347,9 +361,7 @@ void DTCTestClientGUI::OnCreate(HWND hwnd)
                                      WS_VISIBLE | WS_CHILD | WS_BORDER | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY,
                                      account_info_x, y - 220, console_width, 190, hwnd, nullptr, m_hInstance, nullptr);
 
-    // Symbol to ID mapping for market data subscriptions
-    std::map<std::string, uint32_t> m_symbolToIdMap;
-    std::map<uint32_t, std::string> m_idToSymbolMap;
+    // Symbol to ID mapping for market data subscriptions (members are used)
 
     // Status bar
     m_statusBar = CreateWindowA("msctls_statusbar32", "Ready",
@@ -362,6 +374,7 @@ void DTCTestClientGUI::OnCreate(HWND hwnd)
     UpdateConsole("DTC Test Client initialized");
     UpdateConsole("Click 'Connect' to connect to DTC server");
     UpdateConsole("Use 'Account Info' button after connecting to get account data from server");
+    WriteGuiLog("[READY] GUI created and initialized");
 }
 
 void DTCTestClientGUI::OnCommand(HWND hwnd, WPARAM wParam)
@@ -431,6 +444,7 @@ void DTCTestClientGUI::ConnectToServer()
     m_serverPort = atoi(portBuffer);
 
     UpdateConsole("Connecting to " + m_serverHost + ":" + std::to_string(m_serverPort) + "...");
+    WriteGuiLog("[CONNECT] host=" + m_serverHost + " port=" + std::to_string(m_serverPort));
 
     // Create socket
     m_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -466,6 +480,7 @@ void DTCTestClientGUI::ConnectToServer()
     if (connect(m_socket, (sockaddr *)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR)
     {
         UpdateConsole("ERROR: Failed to connect to server");
+        WriteGuiLog("[ERROR] connect failed");
         closesocket(m_socket);
         m_socket = INVALID_SOCKET;
         return;
@@ -478,6 +493,7 @@ void DTCTestClientGUI::ConnectToServer()
     UpdateAccountInfo("Server: " + m_serverHost + ":" + std::to_string(m_serverPort));
     UpdateAccountInfo("Protocol: DTC v8");
     UpdateAccountInfo("Ready to receive account data...");
+    WriteGuiLog("[CONNECTED] to server");
 
     // Start timer for processing incoming data (check every 100ms)
     SetTimer(m_hwnd, 1, 100, nullptr);
@@ -630,17 +646,19 @@ void DTCTestClientGUI::GetDOMData()
     }
 
     UpdateConsole("Getting DOM (Depth of Market) data for: " + symbol);
-
-    // TODO: Implement actual DTC DOM request
-    UpdateConsole("[MOCKED DATA] DOM Data for " + symbol + ":");
-    UpdateConsole("[MOCKED DATA]   Bids:");
-    UpdateConsole("[MOCKED DATA]     $45,250.00 x 0.5");
-    UpdateConsole("[MOCKED DATA]     $45,249.50 x 1.2");
-    UpdateConsole("[MOCKED DATA]     $45,249.00 x 0.8");
-    UpdateConsole("[MOCKED DATA]   Asks:");
-    UpdateConsole("[MOCKED DATA]     $45,251.00 x 0.7");
-    UpdateConsole("[MOCKED DATA]     $45,251.50 x 1.0");
-    UpdateConsole("[MOCKED DATA]     $45,252.00 x 0.9");
+    // Only show mock data when explicitly enabled
+    if (m_enableMockData)
+    {
+        UpdateConsole("[MOCKED DATA] DOM Data for " + symbol + ":");
+        UpdateConsole("[MOCKED DATA]   Bids:");
+        UpdateConsole("[MOCKED DATA]     $45,250.00 x 0.5");
+        UpdateConsole("[MOCKED DATA]     $45,249.50 x 1.2");
+        UpdateConsole("[MOCKED DATA]     $45,249.00 x 0.8");
+        UpdateConsole("[MOCKED DATA]   Asks:");
+        UpdateConsole("[MOCKED DATA]     $45,251.00 x 0.7");
+        UpdateConsole("[MOCKED DATA]     $45,251.50 x 1.0");
+        UpdateConsole("[MOCKED DATA]     $45,252.00 x 0.9");
+    }
 }
 
 void DTCTestClientGUI::SubscribeToSymbol()
@@ -813,6 +831,8 @@ void DTCTestClientGUI::UpdateConsole(const std::string &message)
     ss << std::put_time(std::localtime(&time_t), "[%H:%M:%S] ");
 
     std::string timestampedMessage = ss.str() + message + "\r\n";
+    // Mirror to GUI log file
+    WriteGuiLog(message);
 
     // Get current text length
     int textLength = GetWindowTextLengthA(m_editConsole);
@@ -823,6 +843,31 @@ void DTCTestClientGUI::UpdateConsole(const std::string &message)
 
     // Scroll to bottom
     SendMessage(m_editConsole, EM_SCROLLCARET, 0, 0);
+}
+
+// Helpers: file logger
+std::string DTCTestClientGUI::GetExecutableDir()
+{
+    char path[MAX_PATH] = {0};
+    GetModuleFileNameA(nullptr, path, MAX_PATH);
+    std::string full(path);
+    size_t pos = full.find_last_of("/\\");
+    if (pos == std::string::npos)
+        return ".";
+    return full.substr(0, pos);
+}
+
+void DTCTestClientGUI::InitGuiLogger()
+{
+    // Initialize shared advanced logger using the same INI as server, [gui] section
+    std::string baseDir = GetExecutableDir();
+    std::string configPath = baseDir + "\\config\\logging.ini";
+    open_dtc_server::util::Logger::getInstance().initialize(configPath, "gui");
+}
+
+void DTCTestClientGUI::WriteGuiLog(const std::string &line)
+{
+    open_dtc_server::util::Logger::getInstance().info(line);
 }
 
 void DTCTestClientGUI::UpdateStatus(const std::string &status)
@@ -909,10 +954,12 @@ void DTCTestClientGUI::UpdateMarketData(const std::string &symbol, double bid, d
                        << " (" << std::setprecision(2) << spread_pct << "%)\r\n";
     }
 
-    marketDataText << "\r\nStatus: LIVE STREAMING ✓";
+    marketDataText << "\r\nStatus: LIVE STREAMING [SUCCESS]";
 
     // Replace all text in the market data window
     SetWindowTextA(m_editMarketData, marketDataText.str().c_str());
+    // Append DOM view if available
+    UpdateDOMPanelDisplay(symbol);
 }
 
 void DTCTestClientGUI::UpdateSymbolInfoPanel(const std::string &symbol)
@@ -983,6 +1030,108 @@ void DTCTestClientGUI::ClearConsole()
     }
 }
 
+void DTCTestClientGUI::UpdateDOMFromIncrement(uint16_t symbol_id, uint8_t side, uint16_t position, double price, double size, uint64_t ts)
+{
+    auto &book = m_domBooks[symbol_id];
+    if (side == 1)
+    {
+        if (book.bids.size() <= position)
+            book.bids.resize(position + 1, {0.0, 0.0});
+        book.bids[position] = {price, size};
+    }
+    else if (side == 2)
+    {
+        if (book.asks.size() <= position)
+            book.asks.resize(position + 1, {0.0, 0.0});
+        book.asks[position] = {price, size};
+    }
+    book.last_update_ts = ts;
+}
+
+void DTCTestClientGUI::UpdateDOMPanelDisplay(const std::string &symbol)
+{
+    if (!m_editMarketData)
+        return;
+    if (symbol.empty())
+        return;
+
+    auto itId = m_symbolToIdMap.find(symbol);
+    if (itId == m_symbolToIdMap.end())
+        return;
+
+    uint16_t symId = itId->second;
+    auto itBook = m_domBooks.find(symId);
+    if (itBook == m_domBooks.end())
+        return;
+
+    // Read existing text
+    int len = GetWindowTextLengthA(m_editMarketData);
+    std::string existing;
+    existing.resize(len + 1);
+    GetWindowTextA(m_editMarketData, existing.data(), len + 1);
+    existing.resize(len);
+
+    // Build DOM view (top 5 levels)
+    std::stringstream ss;
+    ss << "\r\n=== ORDER BOOK (Top 5) ===\r\n";
+
+    const auto &book = itBook->second;
+    ss << "BIDS:\r\n";
+    for (size_t i = 0; i < book.bids.size() && i < 5; ++i)
+    {
+        if (book.bids[i].second > 0.0)
+        {
+            ss << "  L" << i << "  $" << std::fixed << std::setprecision(2) << book.bids[i].first
+               << " x " << std::setprecision(6) << book.bids[i].second << "\r\n";
+        }
+    }
+    ss << "ASKS:\r\n";
+    for (size_t i = 0; i < book.asks.size() && i < 5; ++i)
+    {
+        if (book.asks[i].second > 0.0)
+        {
+            ss << "  L" << i << "  $" << std::fixed << std::setprecision(2) << book.asks[i].first
+               << " x " << std::setprecision(6) << book.asks[i].second << "\r\n";
+        }
+    }
+
+    std::string combined = existing + ss.str();
+    SetWindowTextA(m_editMarketData, combined.c_str());
+}
+
+void DTCTestClientGUI::RenderMarketDataPanel(const std::string &symbol)
+{
+    if (!m_editMarketData)
+        return;
+
+    std::stringstream marketDataText;
+    marketDataText << "=== LIVE MARKET DATA ===\r\n";
+    marketDataText << "Symbol: " << symbol << "\r\n";
+    marketDataText << "Last Update: " << m_currentMarketData.last_update_time << "\r\n\r\n";
+
+    if (m_currentMarketData.bid_price > 0.0)
+        marketDataText << "BID: $" << std::fixed << std::setprecision(2) << m_currentMarketData.bid_price << "\r\n";
+    if (m_currentMarketData.ask_price > 0.0)
+        marketDataText << "ASK: $" << std::fixed << std::setprecision(2) << m_currentMarketData.ask_price << "\r\n";
+    if (m_currentMarketData.last_price > 0.0)
+        marketDataText << "LAST: $" << std::fixed << std::setprecision(2) << m_currentMarketData.last_price << "\r\n";
+    if (m_currentMarketData.volume > 0.0)
+        marketDataText << "VOLUME: " << std::fixed << std::setprecision(4) << m_currentMarketData.volume << "\r\n";
+
+    if (m_currentMarketData.bid_price > 0.0 && m_currentMarketData.ask_price > 0.0)
+    {
+        double spread = m_currentMarketData.ask_price - m_currentMarketData.bid_price;
+        double spread_pct = (spread / m_currentMarketData.ask_price) * 100.0;
+        marketDataText << "SPREAD: $" << std::fixed << std::setprecision(4) << spread
+                       << " (" << std::setprecision(2) << spread_pct << "%)\r\n";
+    }
+
+    marketDataText << "\r\nStatus: " << (m_currentMarketData.is_subscribed ? "LIVE STREAMING [SUCCESS]" : "NOT SUBSCRIBED") << "\r\n";
+
+    SetWindowTextA(m_editMarketData, marketDataText.str().c_str());
+    UpdateDOMPanelDisplay(symbol);
+}
+
 std::string DTCTestClientGUI::GetSelectedSymbol()
 {
     if (!m_comboSymbols)
@@ -1002,6 +1151,13 @@ bool DTCTestClientGUI::SendDTCMessage(const std::vector<uint8_t> &message)
     if (!m_isConnected || m_socket == INVALID_SOCKET)
     {
         return false;
+    }
+    // Log outgoing message type and size
+    if (message.size() >= sizeof(open_dtc_server::core::dtc::MessageHeader))
+    {
+        auto type = open_dtc_server::core::dtc::Protocol::get_message_type(message.data(), (uint16_t)message.size());
+        std::string typeStr = open_dtc_server::core::dtc::Protocol::message_type_to_string(type);
+        WriteGuiLog("[OUT] type=" + typeStr + " size=" + std::to_string(message.size()));
     }
 
     int result = send(m_socket, (const char *)message.data(), message.size(), 0);
@@ -1086,12 +1242,15 @@ void DTCTestClientGUI::ProcessDTCMessages()
             auto dtc_message = protocol_handler.parse_message(m_incomingBuffer.data(), message_size);
             if (dtc_message)
             {
+                WriteGuiLog("[IN] type=" + open_dtc_server::core::dtc::Protocol::message_type_to_string(dtc_message->get_type()) +
+                            " size=" + std::to_string(message_size));
                 HandleDTCResponse(std::move(dtc_message));
             }
         }
         catch (const std::exception &e)
         {
             UpdateConsole("Error parsing DTC message: " + std::string(e.what()));
+            WriteGuiLog(std::string("[ERROR] parse_message: ") + e.what());
         }
 
         // Remove processed message from buffer
@@ -1262,6 +1421,7 @@ void DTCTestClientGUI::HandleDTCResponse(std::unique_ptr<open_dtc_server::core::
         break;
     }
 
+        RotateGuiLogsIfNeeded();
     case open_dtc_server::core::dtc::MessageType::MARKET_DATA_UPDATE_TRADE:
     {
         auto *trade_update = static_cast<open_dtc_server::core::dtc::MarketDataUpdateTrade *>(message.get());
@@ -1295,6 +1455,35 @@ void DTCTestClientGUI::HandleDTCResponse(std::unique_ptr<open_dtc_server::core::
             );
         }
         break;
+        RotateGuiLogsIfNeeded();
+    }
+
+    case open_dtc_server::core::dtc::MessageType::MARKET_DEPTH_INCREMENTAL_UPDATE:
+    {
+        auto *dom_update = static_cast<open_dtc_server::core::dtc::MarketDepthIncrementalUpdate *>(message.get());
+
+        std::string symbol_name = "Unknown";
+        auto symbol_it = m_idToSymbolMap.find(dom_update->symbol_id);
+        if (symbol_it != m_idToSymbolMap.end())
+        {
+            symbol_name = symbol_it->second;
+        }
+
+        UpdateConsole("[LIVE DOM] Update: " + symbol_name +
+                      " side=" + std::to_string(dom_update->side) +
+                      " pos=" + std::to_string(dom_update->position) +
+                      " price=" + std::to_string(dom_update->price) +
+                      " size=" + std::to_string(dom_update->size));
+
+        UpdateDOMFromIncrement(dom_update->symbol_id, dom_update->side, dom_update->position, dom_update->price, dom_update->size, dom_update->date_time);
+
+        if (m_currentMarketData.is_subscribed && symbol_name != "Unknown" && m_currentMarketData.symbol == symbol_name)
+        {
+            // Re-render panel to include latest DOM
+            // Reuse current timestamp already set by last L1/trade update
+            RenderMarketDataPanel(symbol_name);
+        }
+        break;
     }
 
     case open_dtc_server::core::dtc::MessageType::MARKET_DATA_RESPONSE:
@@ -1308,12 +1497,22 @@ void DTCTestClientGUI::HandleDTCResponse(std::unique_ptr<open_dtc_server::core::
             m_idToSymbolMap[md_resp->symbol_id] = md_resp->symbol;
         }
 
-        if (md_resp->result == 1)
+        // Interpret ID==0 as unsubscribe acknowledgement
+        if (md_resp->result == 1 && md_resp->symbol_id == 0)
+        {
+            UpdateConsole("[UNSUBSCRIBE] Unsubscribe ACK for " + md_resp->symbol + " (ID: 0)");
+            SetWindowTextA(m_editMarketData,
+                           "No market data subscription\r\n\r\nSelect a symbol and click 'Subscribe' to see live data");
+            m_currentMarketData = MarketDataInfo{};
+            m_currentMarketData.is_subscribed = false;
+        }
+        else if (md_resp->result == 1)
         {
             UpdateConsole("[SUBSCRIBE] MarketDataResponse SUCCESS for " + md_resp->symbol + " (ID: " + std::to_string(md_resp->symbol_id) + ")");
-            // Reflect status in market data panel
             SetWindowTextA(m_editMarketData,
                            ("Subscribed to " + md_resp->symbol + "\r\n\r\nStatus: SUBSCRIBED").c_str());
+            m_currentMarketData.symbol = md_resp->symbol;
+            m_currentMarketData.is_subscribed = true;
         }
         else
         {

@@ -71,6 +71,65 @@ namespace open_dtc_server
             return true;
         }
 
+        bool Logger::initialize(const std::string &config_file_path, const std::string &section_name)
+        {
+            std::lock_guard<std::mutex> lock(log_mutex_);
+
+            if (initialized_)
+            {
+                return true;
+            }
+
+            // Load configuration
+            std::ifstream file(config_file_path);
+            if (file.is_open())
+            {
+                if (!load_config_section(file, section_name))
+                {
+                    // Fallback to full config if section missing
+                    file.close();
+                    if (!load_config(config_file_path))
+                    {
+                        std::cerr << "[LOGGER] Warning: Could not load config file '" << config_file_path
+                                  << "', using defaults" << std::endl;
+                    }
+                }
+            }
+            else
+            {
+                std::cerr << "[LOGGER] Warning: Could not open config file '" << config_file_path
+                          << "', using defaults" << std::endl;
+            }
+
+            // Set log level based on profile
+            switch (config_.profile)
+            {
+            case LogProfile::PROFILE_STD:
+                current_level_ = LogLevel::LOG_ERROR;
+                break;
+            case LogProfile::PROFILE_ADVANCED:
+                current_level_ = LogLevel::LOG_INFO;
+                break;
+            case LogProfile::PROFILE_VERBOSE:
+                current_level_ = LogLevel::LOG_TRACE;
+                break;
+            }
+
+            setup_log_directory();
+
+            if (config_.rotate_on_startup)
+            {
+                rotate_logs_unsafe();
+            }
+            else
+            {
+                open_log_file();
+            }
+
+            initialized_ = true;
+            return true;
+        }
+
         void Logger::setLogProfile(LogProfile profile)
         {
             config_.profile = profile;
@@ -391,9 +450,9 @@ namespace open_dtc_server
                 value.erase(value.find_last_not_of(" \t") + 1);
 
                 // Apply configuration
-                if (current_section == "Profiles")
+                if (current_section == "Profiles" || current_section == "Profile")
                 {
-                    if (key == "Profile")
+                    if (key == "Profile" || key == "profile")
                     {
                         if (value == "std")
                             config_.profile = LogProfile::PROFILE_STD;
@@ -405,21 +464,95 @@ namespace open_dtc_server
                 }
                 else if (current_section == "Logging")
                 {
-                    if (key == "LogDirectory")
+                    if (key == "LogDirectory" || key == "log_directory")
                         config_.log_directory = value;
-                    else if (key == "LogFileName")
+                    else if (key == "LogFileName" || key == "file_path" || key == "log_file_name")
                         config_.log_file_name = value;
-                    else if (key == "MaxFileSize")
+                    else if (key == "MaxFileSize" || key == "max_file_size_mb" || key == "max_file_size")
                         config_.max_file_size = value;
-                    else if (key == "MaxBackupFiles")
+                    else if (key == "MaxBackupFiles" || key == "max_backup_files" || key == "max_log_files")
                         config_.max_log_files = std::stoi(value);
-                    else if (key == "EnableConsole")
+                    else if (key == "EnableConsole" || key == "console_output")
                         config_.console_output = (value == "true" || value == "1");
-                    else if (key == "EnableFile")
+                    else if (key == "EnableFile" || key == "file_output")
                         config_.file_output = (value == "true" || value == "1");
+                }
+                else if (current_section == "gui")
+                {
+                    // GUI-specific overrides
+                    if (key == "log_file_name")
+                        config_.log_file_name = value;
+                    else if (key == "console_output")
+                        config_.console_output = (value == "true" || value == "1");
+                    else if (key == "file_output")
+                        config_.file_output = (value == "true" || value == "1");
+                    else if (key == "log_dtc_messages")
+                        config_.log_dtc_messages = (value == "true" || value == "1");
+                    else if (key == "log_market_data")
+                        config_.log_market_data = (value == "true" || value == "1");
                 }
             }
 
+            return true;
+        }
+
+        bool Logger::load_config_section(std::ifstream &file, const std::string &section_name)
+        {
+            if (section_name.empty())
+                return false;
+
+            std::string line, current_section;
+            while (std::getline(file, line))
+            {
+                if (line.empty() || line[0] == ';' || line[0] == '#')
+                    continue;
+                if (line.front() == '[' && line.back() == ']')
+                {
+                    current_section = line.substr(1, line.length() - 2);
+                    continue;
+                }
+                if (current_section != section_name)
+                    continue;
+                size_t eq_pos = line.find('=');
+                if (eq_pos == std::string::npos)
+                    continue;
+                std::string key = line.substr(0, eq_pos);
+                std::string value = line.substr(eq_pos + 1);
+                key.erase(0, key.find_first_not_of(" \t"));
+                key.erase(key.find_last_not_of(" \t") + 1);
+                value.erase(0, value.find_first_not_of(" \t"));
+                value.erase(value.find_last_not_of(" \t") + 1);
+
+                // Apply minimal keys for overrides
+                if (section_name == "gui")
+                {
+                    if (key == "log_file_name")
+                        config_.log_file_name = value;
+                    else if (key == "console_output")
+                        config_.console_output = (value == "true" || value == "1");
+                    else if (key == "file_output")
+                        config_.file_output = (value == "true" || value == "1");
+                    else if (key == "log_dtc_messages")
+                        config_.log_dtc_messages = (value == "true" || value == "1");
+                    else if (key == "log_market_data")
+                        config_.log_market_data = (value == "true" || value == "1");
+                }
+                else if (section_name == "Logging")
+                {
+                    if (key == "file_path" || key == "LogFileName")
+                        config_.log_file_name = value;
+                    else if (key == "log_directory" || key == "LogDirectory")
+                        config_.log_directory = value;
+                    else if (key == "max_file_size_mb" || key == "MaxFileSize")
+                        config_.max_file_size = value;
+                    else if (key == "max_backup_files" || key == "MaxBackupFiles")
+                        config_.max_log_files = std::stoi(value);
+                    else if (key == "console_output" || key == "EnableConsole")
+                        config_.console_output = (value == "true" || value == "1");
+                    else if (key == "file_output" || key == "EnableFile")
+                        config_.file_output = (value == "true" || value == "1");
+                }
+            }
             return true;
         }
 

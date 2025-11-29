@@ -54,6 +54,7 @@ namespace open_dtc_server
             static Logger &getInstance();
 
             bool initialize(const std::string &config_file_path = "config/logging.ini");
+            bool initialize(const std::string &config_file_path, const std::string &section_name);
             void setLogProfile(LogProfile profile);
             void setLogLevel(LogLevel level);
             LogLevel getLogLevel() const { return current_level_; }
@@ -102,6 +103,7 @@ namespace open_dtc_server
             std::string get_current_timestamp() const;
 
             bool load_config(const std::string &config_file_path);
+            bool load_config_section(std::ifstream &file, const std::string &section_name);
             void setup_log_directory();
             void open_log_file();
             void close_log_file();

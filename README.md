@@ -274,6 +274,10 @@ secrets/cdp_api_key.json
 
 **⚠️ Reality Check**: While we have solid API connectivity, the core DTC features that make this project useful are not yet implemented. The project is currently at the "foundation" stage.
 
+## UI Inspiration
+
+- Portions of the GUI layout and interaction patterns are inspired by the public project CTrader by anhydrous99. See: https://github.com/anhydrous99/CTrader/tree/master
+
 ## License
 
 Licensed under the Apache License, Version 2.0. See `LICENSE` for details.

@@ -28,12 +28,15 @@ if errorlevel 1 (
 
 echo [SUCCESS] Files copied to Debug build directory
 
+REM GUI logging uses [gui] section in logging.ini; no separate GUI config needed
+
 echo Starting DTC Server in Debug mode...
 echo Server logs will be in: logs\dtc_server.log
+echo GUI logs (if running GUI) will be in: logs\dtc_gui_client.log
 echo.
 
 REM Run directly without start command to see error output
-coinbase_dtc_server.exe --credentials "config\cdp_api_key_ECDSA.json" --loglevel verbose
+coinbase_dtc_server.exe --credentials "config\cdp_api_key_ECDSA.json" --log-config "config\logging.ini" --log-level verbose
 
 echo.
 echo Server has stopped with exit code: %errorlevel%

@@ -38,6 +38,8 @@ if exist "config\logging.ini" (
     exit /b 1
 )
 
+REM GUI logging uses [gui] section in logging.ini; no separate GUI config needed
+
 if exist "config\cdp_api_key_ECDSA.json" (
     echo [SUCCESS] Coinbase credentials copied
 ) else (
@@ -48,6 +50,7 @@ if exist "config\cdp_api_key_ECDSA.json" (
 
 echo Starting DTC Server...
 echo Server logs will be in: logs\dtc_server.log
+echo GUI logs (if running GUI) will be in: logs\dtc_gui_client.log
 echo Press Ctrl+C to stop server or close this window
 echo.
 
