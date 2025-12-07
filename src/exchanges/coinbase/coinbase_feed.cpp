@@ -585,6 +585,36 @@ namespace open_dtc_server
                         // Advanced Trade WS uses 'channel' for routing; fall back to 'type' for Exchange.
                         std::string channel = json_message.value("channel", "");
                         std::string type = json_message.value("type", "");
+                        std::string product_id = json_message.value("product_id", "");
+                        if (json_message.contains("events") && json_message["events"].is_array() && !json_message["events"].empty())
+                        {
+                            const auto &ev0 = json_message["events"][0];
+                            if (product_id.empty() && ev0.contains("product_id") && ev0["product_id"].is_string())
+                            {
+                                product_id = ev0["product_id"].get<std::string>();
+                            }
+                        }
+                        if (!channel.empty() || !type.empty())
+                        {
+                            LOG_INFO(std::string("[WS-IN] Channel=") + (channel.empty() ? type : channel) + (product_id.empty() ? std::string("") : std::string(" Product=") + product_id));
+                            // Raw payload logging for diagnostics (throttled per channel)
+                            static int raw_log_counter_trades = 0;
+                            static int raw_log_counter_level2 = 0;
+                            if (channel == "market_trades")
+                            {
+                                if (++raw_log_counter_trades % 50 == 0)
+                                {
+                                    LOG_INFO(std::string("[RAW] market_trades payload: ") + (line.size() > 1024 ? line.substr(0, 1024) + "..." : line));
+                                }
+                            }
+                            else if (channel == "level2" || channel == "l2_data" || type == "l2update")
+                            {
+                                if (++raw_log_counter_level2 % 20 == 0)
+                                {
+                                    LOG_INFO(std::string("[RAW] level2 payload: ") + (line.size() > 2048 ? line.substr(0, 2048) + "..." : line));
+                                }
+                            }
+                        }
 
                         if (!channel.empty())
                         {
@@ -659,6 +689,7 @@ namespace open_dtc_server
             {
                 try
                 {
+                    static int trade_update_count = 0; // throttle logging
                     nlohmann::json json = nlohmann::json::parse(message);
                     auto get_double = [](const nlohmann::json &v) -> double
                     {
@@ -696,6 +727,12 @@ namespace open_dtc_server
                                     trade.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                                                           std::chrono::system_clock::now().time_since_epoch())
                                                           .count();
+                                    if (++trade_update_count % 50 == 0)
+                                    {
+                                        LOG_INFO(std::string("[INFO] Trade update ") + std::to_string(trade_update_count) +
+                                                 " (" + product_id + ") price=" + std::to_string(trade.price) +
+                                                 " size=" + std::to_string(trade.volume));
+                                    }
                                     on_trade_received(trade);
                                 }
                             }
@@ -717,6 +754,12 @@ namespace open_dtc_server
                         trade.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                                               std::chrono::system_clock::now().time_since_epoch())
                                               .count();
+                        if (++trade_update_count % 50 == 0)
+                        {
+                            LOG_INFO(std::string("[INFO] Trade update ") + std::to_string(trade_update_count) +
+                                     " (" + product_id + ") price=" + std::to_string(trade.price) +
+                                     " size=" + std::to_string(trade.volume));
+                        }
                         on_trade_received(trade);
                     }
                 }
@@ -730,6 +773,7 @@ namespace open_dtc_server
             {
                 try
                 {
+                    static int level2_update_count = 0; // throttle logging
                     nlohmann::json json = nlohmann::json::parse(message);
                     auto get_double = [](const nlohmann::json &v) -> double
                     {
@@ -780,6 +824,14 @@ namespace open_dtc_server
                                     level2.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                                                            std::chrono::system_clock::now().time_since_epoch())
                                                            .count();
+                                    // Throttled Level2 update log
+                                    if (++level2_update_count % 100 == 0)
+                                    {
+                                        LOG_INFO(std::string("[INFO] Level2 update ") + std::to_string(level2_update_count) +
+                                                 " (" + product_id + ") bid=" + std::to_string(level2.bid_price) +
+                                                 "x" + std::to_string(level2.bid_size) + " ask=" + std::to_string(level2.ask_price) +
+                                                 "x" + std::to_string(level2.ask_size));
+                                    }
                                     on_level2_received(level2);
                                 }
                             }
@@ -797,6 +849,12 @@ namespace open_dtc_server
                                     level2.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                                                            std::chrono::system_clock::now().time_since_epoch())
                                                            .count();
+                                    if (++level2_update_count % 100 == 0)
+                                    {
+                                        LOG_INFO(std::string("[INFO] Level2 update ") + std::to_string(level2_update_count) +
+                                                 " (" + product_id + ") bid=" + std::to_string(level2.bid_price) +
+                                                 "x" + std::to_string(level2.bid_size));
+                                    }
                                     on_level2_received(level2);
                                 }
                             }
@@ -813,6 +871,12 @@ namespace open_dtc_server
                                     level2.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                                                            std::chrono::system_clock::now().time_since_epoch())
                                                            .count();
+                                    if (++level2_update_count % 100 == 0)
+                                    {
+                                        LOG_INFO(std::string("[INFO] Level2 update ") + std::to_string(level2_update_count) +
+                                                 " (" + product_id + ") ask=" + std::to_string(level2.ask_price) +
+                                                 "x" + std::to_string(level2.ask_size));
+                                    }
                                     on_level2_received(level2);
                                 }
                             }
@@ -852,6 +916,13 @@ namespace open_dtc_server
                                 level2.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                                                        std::chrono::system_clock::now().time_since_epoch())
                                                        .count();
+                                if (++level2_update_count % 100 == 0)
+                                {
+                                    LOG_INFO(std::string("[INFO] Level2 update ") + std::to_string(level2_update_count) +
+                                             " (" + product_id + ") " + (side == "buy" ? "bid=" : "ask=") +
+                                             std::to_string(side == "buy" ? level2.bid_price : level2.ask_price) +
+                                             "x" + std::to_string(side == "buy" ? level2.bid_size : level2.ask_size));
+                                }
                                 on_level2_received(level2);
                             }
                         }
