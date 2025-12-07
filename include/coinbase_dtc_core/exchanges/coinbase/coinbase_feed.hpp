@@ -262,7 +262,7 @@ namespace open_dtc_server
                 std::atomic<uint64_t> connection_uptime_start_;
 
                 // WebSocket constants
-                static constexpr const char *WEBSOCKET_HOST = "ws-feed.exchange.coinbase.com";
+                static constexpr const char *WEBSOCKET_HOST = "advanced-trade-ws.coinbase.com";
                 static constexpr uint16_t WEBSOCKET_PORT = 443;
                 static constexpr const char *WEBSOCKET_PATH = "/";
                 static constexpr uint64_t PING_INTERVAL_MS = 30000;     // 30 seconds

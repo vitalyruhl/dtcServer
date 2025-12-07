@@ -71,7 +71,7 @@ namespace open_dtc_server
             }
 
             SSLWebSocketClient::SSLWebSocketClient()
-                : connected_(false), should_stop_(false), host_("ws-feed.exchange.coinbase.com"),
+                : connected_(false), should_stop_(false), host_("advanced-trade-ws.coinbase.com"),
                   port_(443), ssl_ctx_(nullptr), ssl_(nullptr), bio_(nullptr),
                   ssl_initialized_(false), socket_fd_(-1), messages_received_(0),
                   messages_sent_(0), last_message_time_(0), reconnect_attempts_(0),
@@ -427,14 +427,19 @@ namespace open_dtc_server
                 {
                     // Create JWT token for Coinbase Advanced Trade WebSocket auth
                     auto now = std::chrono::system_clock::now();
+                    // Generate a simple nonce for JWT header
+                    auto nonce_val = std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count());
                     auto token = jwt::create<jwt::traits::nlohmann_json>()
                                      .set_issuer("cdp")
                                      .set_subject(api_key_id_)
-                                     .set_audience("ws-feed.exchange.coinbase.com")
+                                     // Advanced Trade WS does not require audience; use exact host if present
+                                     //.set_audience("advanced-trade-ws.coinbase.com")
                                      .set_issued_at(now)
                                      .set_expires_at(now + std::chrono::seconds(30))
                                      .set_not_before(now - std::chrono::seconds(5))
+                                     .set_type("JWT")
                                      .set_key_id(api_key_id_)
+                                     .set_header_claim("nonce", nonce_val)
                                      .sign(jwt::algorithm::es256("", private_key_, "", ""));
 
                     LOG_INFO("[SUCCESS] JWT token generated");
@@ -973,74 +978,117 @@ namespace open_dtc_server
 
             bool SSLWebSocketClient::authenticate_with_jwt()
             {
+                // Advanced Trade WS uses JWT embedded in subscribe messages (e.g., level2).
+                // Do not send a standalone auth message; simply indicate credentials are loaded.
                 if (!credentials_loaded_)
                 {
                     LOG_WARN("[WARNING] Cannot authenticate - JWT credentials not loaded");
                     return false;
                 }
 
-                std::string jwt_token = generate_jwt_token();
-                if (jwt_token.empty())
-                {
-                    return false;
-                }
-
-                // Create authentication message
-                nlohmann::json auth_message = {
-                    {"type", "subscribe"},
-                    {"channels", nlohmann::json::array()},
-                    {"signature", jwt_token},
-                    {"key", api_key_id_},
-                    {"timestamp", std::chrono::duration_cast<std::chrono::seconds>(
-                                      std::chrono::system_clock::now().time_since_epoch())
-                                      .count()}};
-
-                return send_message(auth_message.dump());
+                LOG_INFO("[AUTH] Skipping standalone auth; JWT will be included in subscribe requests");
+                return true;
             }
 
             bool SSLWebSocketClient::subscribe_to_ticker(const std::vector<std::string> &symbols)
             {
-                nlohmann::json subscribe_message = {
-                    {"type", "subscribe"},
-                    {"channels", nlohmann::json::array({{{"name", "ticker"},
-                                                         {"product_ids", symbols}}})}};
+                // Detect endpoint flavor and build appropriate payload
+                nlohmann::json subscribe_message;
+                const bool is_advanced = host_.find("advanced-trade-ws.coinbase.com") != std::string::npos;
+                if (is_advanced)
+                {
+                    // Advanced Trade WS
+                    subscribe_message = {
+                        {"type", "subscribe"},
+                        {"channel", "market_trades"},
+                        {"product_ids", symbols}};
+                    if (credentials_loaded_)
+                    {
+                        std::string jwt_token = generate_jwt_token();
+                        subscribe_message["jwt"] = jwt_token;
+                    }
+                }
+                else
+                {
+                    // Legacy Exchange WS expects channels array
+                    subscribe_message = {
+                        {"type", "subscribe"},
+                        {"channels", nlohmann::json::array({nlohmann::json{{"name", "matches"}, {"product_ids", symbols}}})}};
+                }
 
+                LOG_DEBUG(std::string("[SEND] Subscribe Ticker Payload: ") + subscribe_message.dump());
                 return send_message(subscribe_message.dump());
             }
 
             bool SSLWebSocketClient::unsubscribe_from_ticker(const std::vector<std::string> &symbols)
             {
-                nlohmann::json unsubscribe_message = {
-                    {"type", "unsubscribe"},
-                    {"channels", nlohmann::json::array({{{"name", "ticker"},
-                                                         {"product_ids", symbols}}})}};
+                nlohmann::json unsubscribe_message;
+                const bool is_advanced = host_.find("advanced-trade-ws.coinbase.com") != std::string::npos;
+                if (is_advanced)
+                {
+                    unsubscribe_message = {
+                        {"type", "unsubscribe"},
+                        {"channel", "market_trades"},
+                        {"product_ids", symbols}};
+                }
+                else
+                {
+                    unsubscribe_message = {
+                        {"type", "unsubscribe"},
+                        {"channels", nlohmann::json::array({nlohmann::json{{"name", "matches"}, {"product_ids", symbols}}})}};
+                }
+                LOG_DEBUG(std::string("[SEND] Unsubscribe Ticker Payload: ") + unsubscribe_message.dump());
                 return send_message(unsubscribe_message.dump());
             }
 
             bool SSLWebSocketClient::subscribe_to_level2(const std::vector<std::string> &symbols)
             {
-                // Include auth fields when credentials are loaded
-                nlohmann::json subscribe_message = {
-                    {"type", "subscribe"},
-                    {"product_ids", symbols},
-                    {"channels", nlohmann::json::array({"level2"})}};
-
-                if (credentials_loaded_)
+                nlohmann::json subscribe_message;
+                const bool is_advanced = host_.find("advanced-trade-ws.coinbase.com") != std::string::npos;
+                if (is_advanced)
                 {
-                    // Coinbase Advanced Trade WebSocket auth: include JWT token in 'jwt' field
-                    std::string jwt_token = generate_jwt_token();
-                    subscribe_message["jwt"] = jwt_token;
+                    // Advanced Trade WS subscribe format
+                    subscribe_message = {
+                        {"type", "subscribe"},
+                        {"channel", "level2"},
+                        {"product_ids", symbols}};
+
+                    if (credentials_loaded_)
+                    {
+                        std::string jwt_token = generate_jwt_token();
+                        subscribe_message["jwt"] = jwt_token;
+                    }
+                }
+                else
+                {
+                    // Legacy Exchange WS expects channels array
+                    subscribe_message = {
+                        {"type", "subscribe"},
+                        {"channels", nlohmann::json::array({nlohmann::json{{"name", "level2"}, {"product_ids", symbols}}})}};
                 }
 
+                LOG_DEBUG(std::string("[SEND] Subscribe Level2 Payload: ") + subscribe_message.dump());
                 return send_message(subscribe_message.dump());
             }
 
             bool SSLWebSocketClient::unsubscribe_from_level2(const std::vector<std::string> &symbols)
             {
-                nlohmann::json unsubscribe_message = {
-                    {"type", "unsubscribe"},
-                    {"channels", nlohmann::json::array({{{"name", "level2"},
-                                                         {"product_ids", symbols}}})}};
+                nlohmann::json unsubscribe_message;
+                const bool is_advanced = host_.find("advanced-trade-ws.coinbase.com") != std::string::npos;
+                if (is_advanced)
+                {
+                    unsubscribe_message = {
+                        {"type", "unsubscribe"},
+                        {"channel", "level2"},
+                        {"product_ids", symbols}};
+                }
+                else
+                {
+                    unsubscribe_message = {
+                        {"type", "unsubscribe"},
+                        {"channels", nlohmann::json::array({nlohmann::json{{"name", "level2"}, {"product_ids", symbols}}})}};
+                }
+                LOG_DEBUG(std::string("[SEND] Unsubscribe Level2 Payload: ") + unsubscribe_message.dump());
                 return send_message(unsubscribe_message.dump());
             }
 

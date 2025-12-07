@@ -101,6 +101,13 @@ namespace open_dtc_server
                         // Keep defaults
                     }
 
+                    // Force Advanced Trade WS host when legacy host is detected
+                    if (host == std::string("ws-feed.exchange.coinbase.com"))
+                    {
+                        LOG_INFO("[COINBASE] Overriding legacy WS host to Advanced Trade: advanced-trade-ws.coinbase.com");
+                        host = "advanced-trade-ws.coinbase.com";
+                    }
+
                     if (use_ssl)
                     {
                         LOG_INFO("[COINBASE] Using SSL WebSocket client with JWT authentication");
@@ -545,56 +552,106 @@ namespace open_dtc_server
             void CoinbaseFeed::on_websocket_message_received(const std::string &message)
             {
                 // Process raw WebSocket message from SSL client
-                util::log_debug("[COINBASE] SSL WebSocket message received: " + message.substr(0, 100) + "...");
+                util::log_debug("[COINBASE] SSL WebSocket message received (len=" + std::to_string(message.size()) + ")");
 
-                try
+                // Some servers send multiple JSON objects concatenated or NDJSON; normalize by
+                // inserting newlines between adjacent objects and splitting on '\n'.
+                std::string normalized = message;
+                // Insert newline between adjacent JSON objects if needed
+                for (size_t pos = 0; (pos = normalized.find("}{", pos)) != std::string::npos;)
                 {
-                    // Parse JSON message
-                    nlohmann::json json_message = nlohmann::json::parse(message);
+                    normalized.replace(pos, 2, "}\n{");
+                    pos += 3;
+                }
 
-                    if (json_message.contains("type"))
+                std::stringstream ss(normalized);
+                std::string line;
+                while (std::getline(ss, line))
+                {
+                    if (line.empty())
+                        continue;
+                    // Trim whitespace
+                    line.erase(0, line.find_first_not_of(" \t\r\n"));
+                    line.erase(line.find_last_not_of(" \t\r\n") + 1);
+                    if (line.empty())
+                        continue;
+
+                    util::log_debug("[COINBASE] WS chunk: " + (line.size() > 200 ? line.substr(0, 200) + "..." : line));
+
+                    try
                     {
-                        std::string message_type = json_message["type"];
+                        nlohmann::json json_message = nlohmann::json::parse(line);
 
-                        if (message_type == "ticker")
+                        // Advanced Trade WS uses 'channel' for routing; fall back to 'type' for Exchange.
+                        std::string channel = json_message.value("channel", "");
+                        std::string type = json_message.value("type", "");
+
+                        if (!channel.empty())
                         {
-                            // Handle ticker message
-                            handle_ticker_message(message);
+                            // Alias Coinbase Advanced Trade Level2 variations
+                            if (channel == "l2_data")
+                                channel = "level2";
+                            if (channel == "market_trades")
+                            {
+                                handle_trade_message(line);
+                            }
+                            else if (channel == "level2")
+                            {
+                                handle_level2_message(line);
+                            }
+                            else if (channel == "heartbeat")
+                            {
+                                handle_heartbeat_message(line);
+                            }
+                            else if (channel == "subscriptions")
+                            {
+                                handle_subscriptions_message(line);
+                            }
+                            else if (channel == "errors")
+                            {
+                                handle_error_message(line);
+                            }
+                            else
+                            {
+                                LOG_INFO("[COINBASE] Unknown channel: " + channel);
+                            }
                         }
-                        else if (message_type == "match")
+                        else if (!type.empty())
                         {
-                            // Handle trade message
-                            handle_trade_message(message);
-                        }
-                        else if (message_type == "l2update")
-                        {
-                            // Handle level2 update
-                            handle_level2_message(message);
-                        }
-                        else if (message_type == "heartbeat")
-                        {
-                            // Handle heartbeat
-                            handle_heartbeat_message(message);
-                        }
-                        else if (message_type == "subscriptions")
-                        {
-                            // Handle subscription confirmation from Coinbase
-                            handle_subscriptions_message(message);
-                        }
-                        else if (message_type == "error")
-                        {
-                            // Handle error
-                            handle_error_message(message);
-                        }
-                        else
-                        {
-                            LOG_INFO("[COINBASE] Unknown message type: " + message_type);
+                            if (type == "ticker")
+                            {
+                                handle_ticker_message(line);
+                            }
+                            else if (type == "match")
+                            {
+                                handle_trade_message(line);
+                            }
+                            else if (type == "l2update")
+                            {
+                                handle_level2_message(line);
+                            }
+                            else if (type == "heartbeat")
+                            {
+                                handle_heartbeat_message(line);
+                            }
+                            else if (type == "subscriptions")
+                            {
+                                handle_subscriptions_message(line);
+                            }
+                            else if (type == "error")
+                            {
+                                handle_error_message(line);
+                            }
+                            else
+                            {
+                                LOG_INFO("[COINBASE] Unknown message type: " + type);
+                            }
                         }
                     }
-                }
-                catch (const std::exception &e)
-                {
-                    LOG_INFO("[ERROR] Failed to parse SSL WebSocket message: " + std::string(e.what()));
+                    catch (const std::exception &e)
+                    {
+                        LOG_INFO("[ERROR] Failed to parse SSL WebSocket message chunk: " + std::string(e.what()));
+                    }
                 }
             }
 
@@ -603,14 +660,56 @@ namespace open_dtc_server
                 try
                 {
                     nlohmann::json json = nlohmann::json::parse(message);
+                    auto get_double = [](const nlohmann::json &v) -> double
+                    {
+                        if (v.is_number_float())
+                            return v.get<double>();
+                        if (v.is_number_integer())
+                            return static_cast<double>(v.get<long long>());
+                        if (v.is_string())
+                            return std::stod(v.get<std::string>());
+                        return 0.0;
+                    };
 
+                    // Advanced Trade WS format with events
+                    if (json.contains("events"))
+                    {
+                        auto events = json["events"];
+                        for (const auto &ev : events)
+                        {
+                            std::string product_id = ev.value("product_id", "");
+                            if (ev.contains("trades"))
+                            {
+                                for (const auto &t : ev["trades"])
+                                {
+                                    double price = 0.0;
+                                    double size = 0.0;
+                                    if (t.contains("price"))
+                                        price = get_double(t["price"]);
+                                    if (t.contains("size"))
+                                        size = get_double(t["size"]);
+
+                                    exchanges::base::MarketTrade trade;
+                                    trade.symbol = product_id;
+                                    trade.price = price;
+                                    trade.volume = size;
+                                    trade.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                          std::chrono::system_clock::now().time_since_epoch())
+                                                          .count();
+                                    on_trade_received(trade);
+                                }
+                            }
+                        }
+                        return;
+                    }
+
+                    // Fallback: Exchange feed format
                     if (json.contains("product_id") && json.contains("price") && json.contains("size"))
                     {
                         std::string product_id = json["product_id"];
-                        double price = std::stod(json["price"].get<std::string>());
-                        double size = std::stod(json["size"].get<std::string>());
+                        double price = get_double(json["price"]);
+                        double size = get_double(json["size"]);
 
-                        // Convert to DTC format
                         exchanges::base::MarketTrade trade;
                         trade.symbol = product_id;
                         trade.price = price;
@@ -618,8 +717,6 @@ namespace open_dtc_server
                         trade.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                                               std::chrono::system_clock::now().time_since_epoch())
                                               .count();
-
-                        // Forward to base class
                         on_trade_received(trade);
                     }
                 }
@@ -634,24 +731,110 @@ namespace open_dtc_server
                 try
                 {
                     nlohmann::json json = nlohmann::json::parse(message);
+                    auto get_double = [](const nlohmann::json &v) -> double
+                    {
+                        if (v.is_number_float())
+                            return v.get<double>();
+                        if (v.is_number_integer())
+                            return static_cast<double>(v.get<long long>());
+                        if (v.is_string())
+                            return std::stod(v.get<std::string>());
+                        return 0.0;
+                    };
 
+                    // Advanced Trade WS format: events -> updates or snapshot
+                    if (json.contains("events"))
+                    {
+                        auto events = json["events"];
+                        for (const auto &ev : events)
+                        {
+                            std::string product_id = ev.value("product_id", "");
+                            if (ev.contains("updates"))
+                            {
+                                for (const auto &up : ev["updates"])
+                                {
+                                    std::string side = up.value("side", "");
+                                    double price = 0.0;
+                                    double size = 0.0;
+                                    if (up.contains("price"))
+                                        price = get_double(up["price"]);
+                                    if (up.contains("size"))
+                                        size = get_double(up["size"]);
+
+                                    exchanges::base::MarketLevel2 level2;
+                                    level2.symbol = product_id;
+                                    if (side == "bid" || side == "buy")
+                                    {
+                                        level2.bid_price = price;
+                                        level2.bid_size = size;
+                                        level2.ask_price = 0.0;
+                                        level2.ask_size = 0.0;
+                                    }
+                                    else
+                                    {
+                                        level2.bid_price = 0.0;
+                                        level2.bid_size = 0.0;
+                                        level2.ask_price = price;
+                                        level2.ask_size = size;
+                                    }
+                                    level2.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                           std::chrono::system_clock::now().time_since_epoch())
+                                                           .count();
+                                    on_level2_received(level2);
+                                }
+                            }
+                            // If snapshots are present, convert rows to MarketLevel2 entries
+                            if (ev.contains("bids"))
+                            {
+                                for (const auto &b : ev["bids"])
+                                {
+                                    exchanges::base::MarketLevel2 level2;
+                                    level2.symbol = product_id;
+                                    level2.bid_price = get_double(b[0]);
+                                    level2.bid_size = get_double(b[1]);
+                                    level2.ask_price = 0.0;
+                                    level2.ask_size = 0.0;
+                                    level2.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                           std::chrono::system_clock::now().time_since_epoch())
+                                                           .count();
+                                    on_level2_received(level2);
+                                }
+                            }
+                            if (ev.contains("asks"))
+                            {
+                                for (const auto &a : ev["asks"])
+                                {
+                                    exchanges::base::MarketLevel2 level2;
+                                    level2.symbol = product_id;
+                                    level2.bid_price = 0.0;
+                                    level2.bid_size = 0.0;
+                                    level2.ask_price = get_double(a[0]);
+                                    level2.ask_size = get_double(a[1]);
+                                    level2.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                           std::chrono::system_clock::now().time_since_epoch())
+                                                           .count();
+                                    on_level2_received(level2);
+                                }
+                            }
+                        }
+                        return;
+                    }
+
+                    // Fallback: Exchange feed format
                     if (json.contains("product_id") && json.contains("changes"))
                     {
                         std::string product_id = json["product_id"];
                         auto changes = json["changes"];
-
                         for (const auto &change : changes)
                         {
                             if (change.size() >= 3)
                             {
-                                std::string side = change[0]; // "buy" or "sell"
-                                double price = std::stod(change[1].get<std::string>());
-                                double size = std::stod(change[2].get<std::string>());
+                                std::string side = change[0];
+                                double price = get_double(change[1]);
+                                double size = get_double(change[2]);
 
-                                // Convert to DTC format
                                 exchanges::base::MarketLevel2 level2;
                                 level2.symbol = product_id;
-
                                 if (side == "buy")
                                 {
                                     level2.bid_price = price;
@@ -666,12 +849,9 @@ namespace open_dtc_server
                                     level2.ask_price = price;
                                     level2.ask_size = size;
                                 }
-
                                 level2.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                                                        std::chrono::system_clock::now().time_since_epoch())
                                                        .count();
-
-                                // Forward to base class
                                 on_level2_received(level2);
                             }
                         }
