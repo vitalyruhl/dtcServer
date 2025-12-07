@@ -332,10 +332,11 @@ namespace open_dtc_server
                         if (json_data.contains("name"))
                         {
                             std::string name = json_data["name"];
-                            // Extract API key ID from the full name
-                            // Format: "organizations/{org_id}/apiKeys/{api_key_id}"
+                            // Keep full CDP key name for JWT kid/sub
+                            api_key_full_name_ = name;
+                            // Also provide short id (last segment) for legacy code paths
                             size_t last_slash = name.find_last_of('/');
-                            if (last_slash != std::string::npos)
+                            if (last_slash != std::string::npos && last_slash + 1 < name.size())
                             {
                                 std::string api_key_id = name.substr(last_slash + 1);
                                 if (!api_key_id.empty())
@@ -431,14 +432,13 @@ namespace open_dtc_server
                     auto nonce_val = std::to_string(std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count());
                     auto token = jwt::create<jwt::traits::nlohmann_json>()
                                      .set_issuer("cdp")
-                                     .set_subject(api_key_id_)
-                                     // Advanced Trade WS does not require audience; use exact host if present
-                                     //.set_audience("advanced-trade-ws.coinbase.com")
+                                     .set_subject(api_key_full_name_.empty() ? api_key_id_ : api_key_full_name_)
+                                     .set_audience("advanced-trade-ws.coinbase.com")
                                      .set_issued_at(now)
                                      .set_expires_at(now + std::chrono::seconds(30))
                                      .set_not_before(now - std::chrono::seconds(5))
                                      .set_type("JWT")
-                                     .set_key_id(api_key_id_)
+                                     .set_key_id(api_key_full_name_.empty() ? api_key_id_ : api_key_full_name_)
                                      .set_header_claim("nonce", nonce_val)
                                      .sign(jwt::algorithm::es256("", private_key_, "", ""));
 
@@ -898,13 +898,18 @@ namespace open_dtc_server
                         std::string message = parse_websocket_frame(frame_data);
 
                         // Only process text frames as JSON - ignore binary/control frames
-                        if (!message.empty() && message_callback_ && is_valid_json_start(message))
+                        if (!message.empty())
                         {
-                            message_callback_(message);
-                        }
-                        else if (!message.empty() && !is_valid_json_start(message))
-                        {
-                            LOG_DEBUG("[DEBUG] Ignoring non-JSON WebSocket frame (binary/control data)");
+                            if (is_valid_json_start(message))
+                            {
+                                // Stream-safe buffering: accumulate and emit complete JSON objects
+                                json_buffer_ += message;
+                                emit_complete_json_messages();
+                            }
+                            else
+                            {
+                                LOG_DEBUG("[DEBUG] Ignoring non-JSON WebSocket frame (binary/control data)");
+                            }
                         }
 
                         messages_received_.fetch_add(1);
@@ -1273,6 +1278,84 @@ namespace open_dtc_server
                 // JSON should start with { or [
                 char first_char = message[start];
                 return first_char == '{' || first_char == '[';
+            }
+
+            // NEW: Maintain a stream buffer and emit fully balanced JSON objects
+            void SSLWebSocketClient::emit_complete_json_messages()
+            {
+                // Simple brace/bracket balance tracker to find complete JSON payloads
+                size_t start = 0;
+                int brace = 0;
+                int bracket = 0;
+                bool in_string = false;
+                bool escape = false;
+
+                for (size_t i = 0; i < json_buffer_.size(); ++i)
+                {
+                    char c = json_buffer_[i];
+                    if (escape)
+                    {
+                        escape = false;
+                        continue;
+                    }
+                    if (in_string)
+                    {
+                        if (c == '\\')
+                            escape = true;
+                        else if (c == '"')
+                            in_string = false;
+                        continue;
+                    }
+                    else
+                    {
+                        if (c == '"')
+                        {
+                            in_string = true;
+                            continue;
+                        }
+                        if (c == '{')
+                        {
+                            if (brace == 0 && bracket == 0)
+                                start = i; // start of object
+                            brace++;
+                        }
+                        else if (c == '}')
+                        {
+                            brace--;
+                        }
+                        else if (c == '[')
+                        {
+                            if (brace == 0 && bracket == 0)
+                                start = i; // start of array
+                            bracket++;
+                        }
+                        else if (c == ']')
+                        {
+                            bracket--;
+                        }
+                    }
+
+                    if (brace == 0 && bracket == 0 && (c == '}' || c == ']'))
+                    {
+                        // We have a complete JSON entity from start..i
+                        if (i + 1 <= json_buffer_.size())
+                        {
+                            std::string complete = json_buffer_.substr(start, i - start + 1);
+                            if (message_callback_)
+                            {
+                                message_callback_(complete);
+                            }
+                            // Erase emitted part and restart scanning from beginning
+                            json_buffer_.erase(0, i + 1);
+                            i = static_cast<size_t>(-1); // wrap to restart loop with i=0
+                            start = 0;
+                            brace = 0;
+                            bracket = 0;
+                            in_string = false;
+                            escape = false;
+                        }
+                    }
+                }
             }
 
             std::chrono::steady_clock::time_point SSLWebSocketClient::get_last_message_time() const

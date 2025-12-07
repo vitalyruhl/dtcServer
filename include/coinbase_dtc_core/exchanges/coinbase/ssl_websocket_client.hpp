@@ -108,6 +108,7 @@ namespace open_dtc_server
                 std::string parse_websocket_frame(const std::vector<uint8_t> &frame);
                 size_t calculate_frame_size(const std::vector<uint8_t> &frame_data);
                 bool is_valid_json_start(const std::string &message);
+                void emit_complete_json_messages();
 
                 // Worker threads
                 void worker_loop();
@@ -144,6 +145,7 @@ namespace open_dtc_server
                 std::queue<std::string> outgoing_messages_;
                 std::mutex message_queue_mutex_;
                 std::vector<uint8_t> incoming_buffer_;
+                std::string json_buffer_;
 
                 // Statistics
                 std::atomic<uint64_t> messages_received_;
@@ -157,6 +159,7 @@ namespace open_dtc_server
 
                 // JWT credentials
                 std::string api_key_id_;
+                std::string api_key_full_name_;
                 std::string private_key_;
                 bool credentials_loaded_;
             };
