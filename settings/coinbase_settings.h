@@ -35,8 +35,12 @@ namespace open_dtc_server
                     // Only needed for private account data or trading functionality
                     constexpr const char *ADVANCED_API_URL = "https://api.coinbase.com/api/v3";
 
-                    // WebSocket Feed for real-time data
-                    constexpr const char *WEBSOCKET_URL = "wss://ws-feed.exchange.coinbase.com";
+                    // Default WebSocket Feed for real-time data (Advanced Trade JWT endpoint)
+                    // This default targets Advanced Trade authenticated channels (level2/level3/full)
+                    // Exchange (CBPro) feed can still be used via runtime override (--ws-url)
+                    constexpr const char *WEBSOCKET_URL = "wss://advanced-trade-ws.coinbase.com";
+                    // Optional: Exchange (CBPro) WebSocket for public/HMAC flows
+                    constexpr const char *EXCHANGE_WEBSOCKET_URL = "wss://ws-feed.exchange.coinbase.com";
                 }
 
                 // Rate Limiting Configuration

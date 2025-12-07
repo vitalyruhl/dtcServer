@@ -4,6 +4,7 @@ Status Legend: ✅ COMPLETED, 🚧 CURRENT, ⏳ PENDING
 
 Branch: `feature/gui-dom-candles-trades`
 Base: `main`
+References: https://github.com/amirphl/orderbook-merger/tree/main,https://github.com/anhydrous99/CTrader/tree/master, https://github.com/jusbar23/cbpro-cpp
 
 ## 1. L2 Auth & Server DOM
 

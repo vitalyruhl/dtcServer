@@ -117,6 +117,66 @@ namespace open_dtc_server
 #endif
             }
 
+            // Duplicate authenticate_with_jwt implementation removed; canonical version is defined later
+#if 0
+            bool SSLWebSocketClient::authenticate_with_jwt()
+            {
+                // Deprecated duplicate implementation. See canonical version later in file.
+                return false;
+            }
+#endif
+            // Removed duplicate early authenticate_with_jwt implementation; see canonical implementation later in file
+            // authenticate_with_jwt implemented later in file with Coinbase-required fields
+            // (duplicate removed) authenticate_with_jwt is defined earlier in this file
+
+            // Duplicate subscribe_to_ticker implementation removed; canonical version is defined later
+#if 0
+            bool SSLWebSocketClient::subscribe_to_ticker(const std::vector<std::string> &symbols)
+            {
+                // Deprecated duplicate implementation. See canonical version later in file.
+                return false;
+            }
+#endif
+            // Removed duplicate early subscribe_to_ticker; see canonical implementation later in file
+            // subscribe_to_ticker implemented later in file
+            // (duplicate removed) subscribe_to_ticker is defined earlier in this file
+
+            // Duplicate subscribe_to_level2 implementation removed; canonical version is defined later
+#if 0
+            bool SSLWebSocketClient::subscribe_to_level2(const std::vector<std::string> &symbols)
+            {
+                // Deprecated duplicate implementation. See canonical version later in file.
+                return false;
+            }
+#endif
+            // Removed duplicate early subscribe_to_level2; see canonical implementation later in file
+            // subscribe_to_level2 implemented later in file
+            // (duplicate removed) subscribe_to_level2 is defined earlier in this file
+
+            // Duplicate unsubscribe_from_ticker implementation removed; canonical version is defined later
+#if 0
+            bool SSLWebSocketClient::unsubscribe_from_ticker(const std::vector<std::string> &symbols)
+            {
+                // Deprecated duplicate implementation. See canonical version later in file.
+                return false;
+            }
+#endif
+            // Removed duplicate early unsubscribe_from_ticker; see canonical implementation later in file
+            // unsubscribe_from_ticker implemented later in file
+            // (duplicate removed) unsubscribe_from_ticker is defined earlier in this file
+
+            // Duplicate unsubscribe_from_level2 implementation removed; canonical version is defined later
+#if 0
+            bool SSLWebSocketClient::unsubscribe_from_level2(const std::vector<std::string> &symbols)
+            {
+                // Deprecated duplicate implementation. See canonical version later in file.
+                return false;
+            }
+#endif
+            // Removed duplicate early unsubscribe_from_level2; see canonical implementation later in file
+            // unsubscribe_from_level2 implemented later in file
+            // (duplicate removed) unsubscribe_from_level2 is defined earlier in this file
+
             bool SSLWebSocketClient::init_ssl()
             {
                 if (ssl_initialized_)
@@ -365,14 +425,16 @@ namespace open_dtc_server
 
                 try
                 {
-                    // Create JWT token for Coinbase Advanced Trade API
+                    // Create JWT token for Coinbase Advanced Trade WebSocket auth
+                    auto now = std::chrono::system_clock::now();
                     auto token = jwt::create<jwt::traits::nlohmann_json>()
                                      .set_issuer("cdp")
                                      .set_subject(api_key_id_)
-                                     .set_audience("retail_rest_api_proxy")
-                                     .set_issued_at(std::chrono::system_clock::now())
-                                     .set_expires_at(std::chrono::system_clock::now() + std::chrono::minutes(1))
-                                     .set_not_before(std::chrono::system_clock::now() - std::chrono::seconds(10))
+                                     .set_audience("ws-feed.exchange.coinbase.com")
+                                     .set_issued_at(now)
+                                     .set_expires_at(now + std::chrono::seconds(30))
+                                     .set_not_before(now - std::chrono::seconds(5))
+                                     .set_key_id(api_key_id_)
                                      .sign(jwt::algorithm::es256("", private_key_, "", ""));
 
                     LOG_INFO("[SUCCESS] JWT token generated");
@@ -960,18 +1022,14 @@ namespace open_dtc_server
                 // Include auth fields when credentials are loaded
                 nlohmann::json subscribe_message = {
                     {"type", "subscribe"},
-                    {"channels", nlohmann::json::array({{{"name", "level2"},
-                                                         {"product_ids", symbols}}})}};
+                    {"product_ids", symbols},
+                    {"channels", nlohmann::json::array({"level2"})}};
 
                 if (credentials_loaded_)
                 {
-                    // Coinbase Advanced Trade requires a JWT signature and key_id/timestamp
+                    // Coinbase Advanced Trade WebSocket auth: include JWT token in 'jwt' field
                     std::string jwt_token = generate_jwt_token();
-                    subscribe_message["signature"] = jwt_token;
-                    subscribe_message["key"] = api_key_id_;
-                    subscribe_message["timestamp"] = std::chrono::duration_cast<std::chrono::seconds>(
-                                                         std::chrono::system_clock::now().time_since_epoch())
-                                                         .count();
+                    subscribe_message["jwt"] = jwt_token;
                 }
 
                 return send_message(subscribe_message.dump());

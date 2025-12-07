@@ -10,6 +10,7 @@
 #include <chrono>
 #include <algorithm>
 #include <cstdio>
+#include <map>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -172,6 +173,123 @@ namespace coinbase_dtc_core
                 {
                     std::cout << "Exception adding exchange " + exchange_config.name + ": " + e.what() << std::endl;
                     return false;
+                }
+            }
+
+            // Simple in-memory order book per symbol
+            struct BookSide
+            {
+                // price -> size
+                std::map<double, double, std::greater<double>> bids;
+                std::map<double, double, std::less<double>> asks;
+            };
+
+            static uint16_t compute_position_bid(const std::map<double, double, std::greater<double>> &bids, double price)
+            {
+                uint16_t pos = 0;
+                for (const auto &kv : bids)
+                {
+                    if (kv.first == price)
+                        return pos;
+                    ++pos;
+                }
+                return pos;
+            }
+
+            static uint16_t compute_position_ask(const std::map<double, double, std::less<double>> &asks, double price)
+            {
+                uint16_t pos = 0;
+                for (const auto &kv : asks)
+                {
+                    if (kv.first == price)
+                        return pos;
+                    ++pos;
+                }
+                return pos;
+            }
+
+            // Global books map guarded by mutex
+            static std::mutex g_books_mutex;
+            static std::unordered_map<std::string, BookSide> g_books;
+
+            void DTCServer::on_level2_data(const open_dtc_server::exchanges::base::MarketLevel2 &level2)
+            {
+                // Normalize symbol (Coinbase "BTC-USD" -> "BTC/USD") if needed
+                std::string symbol = level2.symbol;
+
+                // Update book based on which side changed
+                uint64_t ts = open_dtc_server::core::dtc::Protocol::get_current_timestamp();
+
+                std::vector<open_dtc_server::core::dtc::MarketDepthIncrementalUpdate> updates;
+
+                {
+                    std::lock_guard<std::mutex> lock(g_books_mutex);
+                    auto &book = g_books[symbol];
+
+                    if (level2.bid_price > 0.0)
+                    {
+                        if (level2.bid_size <= 0.0)
+                        {
+                            book.bids.erase(level2.bid_price);
+                        }
+                        else
+                        {
+                            book.bids[level2.bid_price] = level2.bid_size;
+                        }
+                        uint16_t pos = compute_position_bid(book.bids, level2.bid_price);
+                        open_dtc_server::core::dtc::MarketDepthIncrementalUpdate u;
+                        u.symbol_id = 0; // Map later per client
+                        u.side = 1;      // Bid
+                        u.position = pos;
+                        u.price = level2.bid_price;
+                        u.size = level2.bid_size;
+                        u.date_time = ts;
+                        updates.push_back(u);
+                    }
+
+                    if (level2.ask_price > 0.0)
+                    {
+                        if (level2.ask_size <= 0.0)
+                        {
+                            book.asks.erase(level2.ask_price);
+                        }
+                        else
+                        {
+                            book.asks[level2.ask_price] = level2.ask_size;
+                        }
+                        uint16_t pos = compute_position_ask(book.asks, level2.ask_price);
+                        open_dtc_server::core::dtc::MarketDepthIncrementalUpdate u;
+                        u.symbol_id = 0; // Map later per client
+                        u.side = 2;      // Ask
+                        u.position = pos;
+                        u.price = level2.ask_price;
+                        u.size = level2.ask_size;
+                        u.date_time = ts;
+                        updates.push_back(u);
+                    }
+                }
+
+                // Broadcast to all clients with per-client symbol_id mapping
+                std::lock_guard<std::mutex> clients_lock(clients_mutex_);
+                for (auto &client : clients_)
+                {
+                    if (!client || !client->is_connected())
+                        continue;
+                    auto &session = client->get_session();
+                    uint16_t sid = 0;
+                    auto it = session.symbol_to_id.find(symbol);
+                    if (it != session.symbol_to_id.end())
+                        sid = static_cast<uint16_t>(it->second);
+
+                    for (auto &u : updates)
+                    {
+                        if (sid == 0)
+                            continue; // Skip if client has no ID for symbol yet
+                        u.symbol_id = sid;
+                        auto bytes = u.serialize();
+                        send_to_client(client, bytes);
+                        total_level2_updates_sent_++;
+                    }
                 }
             }
 
@@ -397,6 +515,16 @@ namespace coinbase_dtc_core
                 std::cout << "Server thread ending" << std::endl;
             }
 
+            void DTCServer::send_to_client(std::shared_ptr<ClientConnection> client, const std::vector<uint8_t> &message)
+            {
+                if (!client || !client->is_connected())
+                {
+                    return;
+                }
+                client->send_message(message);
+                total_messages_sent_++;
+            }
+
             void DTCServer::client_handler_thread(std::shared_ptr<ClientConnection> client)
             {
                 std::cout << "Client handler thread started for client " + std::to_string(client->get_client_id()) << std::endl;
@@ -526,77 +654,7 @@ namespace coinbase_dtc_core
                 }
             }
 
-            void DTCServer::on_level2_data(const open_dtc_server::exchanges::base::MarketLevel2 &level2)
-            {
-                // Broadcast level2 data to connected clients
-                if (level2.symbol.empty() == false)
-                {
-                    std::lock_guard<std::mutex> lock(clients_mutex_);
-
-                    // Create DTC protocol instance
-                    open_dtc_server::core::dtc::Protocol protocol;
-
-                    // Find clients subscribed to this symbol
-                    int broadcasts = 0;
-                    for (auto client : clients_)
-                    {
-                        if (!client || !client->is_connected())
-                            continue;
-
-                        auto &subscriptions = client->get_session().subscribed_symbols;
-                        if (std::find(subscriptions.begin(), subscriptions.end(), level2.symbol) != subscriptions.end())
-                        {
-                            // Get symbol ID for this client
-                            auto symbol_id_it = client->get_session().symbol_to_id.find(level2.symbol);
-                            if (symbol_id_it != client->get_session().symbol_to_id.end())
-                            {
-                                // If best bid/ask are available, send top-of-book update
-                                if (level2.bid_price > 0.0 || level2.ask_price > 0.0)
-                                {
-                                    auto bid_ask_update = protocol.create_bid_ask_update(
-                                        symbol_id_it->second,
-                                        level2.bid_price,
-                                        static_cast<float>(level2.bid_size),
-                                        level2.ask_price,
-                                        static_cast<float>(level2.ask_size),
-                                        open_dtc_server::core::dtc::Protocol::get_current_timestamp());
-                                    auto message_data = protocol.create_message(*bid_ask_update);
-                                    client->send_message(message_data);
-                                }
-                                // Additionally emit DOM incremental updates per side when sizes are provided
-                                if (level2.bid_price > 0.0 && level2.bid_size >= 0.0)
-                                {
-                                    open_dtc_server::core::dtc::MarketDepthIncrementalUpdate dom;
-                                    dom.symbol_id = symbol_id_it->second;
-                                    dom.side = 1;     // Bid
-                                    dom.position = 0; // Best level for now
-                                    dom.price = level2.bid_price;
-                                    dom.size = level2.bid_size;
-                                    dom.date_time = open_dtc_server::core::dtc::Protocol::get_current_timestamp();
-                                    client->send_message(dom.serialize());
-                                }
-                                if (level2.ask_price > 0.0 && level2.ask_size >= 0.0)
-                                {
-                                    open_dtc_server::core::dtc::MarketDepthIncrementalUpdate dom;
-                                    dom.symbol_id = symbol_id_it->second;
-                                    dom.side = 2;     // Ask
-                                    dom.position = 0; // Best level for now
-                                    dom.price = level2.ask_price;
-                                    dom.size = level2.ask_size;
-                                    dom.date_time = open_dtc_server::core::dtc::Protocol::get_current_timestamp();
-                                    client->send_message(dom.serialize());
-                                }
-                                broadcasts++;
-                            }
-                        }
-                    }
-
-                    if (broadcasts > 0)
-                    {
-                        std::cout << "[LEVEL2] Level2 broadcasted: " + level2.symbol + " Bid=$" + std::to_string(level2.bid_price) + " Ask=$" + std::to_string(level2.ask_price) + " (DOM incremental emitted) to " + std::to_string(broadcasts) + " clients" << std::endl;
-                    }
-                }
-            }
+            // (removed) old on_level2_data duplicate; unified with order book-based implementation above
 
             void DTCServer::on_exchange_connection(bool connected, const std::string &exchange)
             {

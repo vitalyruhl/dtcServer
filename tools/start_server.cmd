@@ -56,7 +56,13 @@ echo.
 
 REM Start server with config files in config/ subdirectory
 REM Use start command to run in separate process so script can exit properly
-start "DTC Server" /wait coinbase_dtc_server.exe --credentials "config\cdp_api_key_ECDSA.json" --log-config "config\logging.ini" --log-level verbose
+REM Note: CLI flags in server are --logconfig and --loglevel (no hyphens)
+REM Advanced Trade WebSocket endpoint requires JWT; override WS URL accordingly
+start "DTC Server" /wait coinbase_dtc_server.exe ^
+    --credentials "config\cdp_api_key_ECDSA.json" ^
+    --logconfig "config\logging.ini" ^
+    --loglevel verbose ^
+    --ws-url "wss://advanced-trade-ws.coinbase.com"
 
 echo.
 echo Server has stopped.

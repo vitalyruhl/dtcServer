@@ -61,7 +61,45 @@ namespace open_dtc_server
                     LOG_INFO("[COINBASE] Connecting to Secure WebSocket: " + config_.websocket_url);
 
                     // Choose between SSL WebSocket (for authenticated feeds) or plain WebSocket
-                    bool use_ssl = config_.websocket_url.find("wss://") == 0 || config_.websocket_url.find("443") != std::string::npos;
+                    bool use_ssl = config_.websocket_url.find("wss://") == 0 || config_.websocket_url.find(":443") != std::string::npos;
+
+                    // Parse host and port from config_.websocket_url
+                    std::string host = "ws-feed.exchange.coinbase.com";
+                    int port = use_ssl ? 443 : 80;
+                    try
+                    {
+                        std::string url = config_.websocket_url;
+                        // Strip scheme
+                        if (url.rfind("wss://", 0) == 0)
+                            url = url.substr(6);
+                        else if (url.rfind("ws://", 0) == 0)
+                            url = url.substr(5);
+                        // Extract host[:port]
+                        size_t slashPos = url.find('/');
+                        std::string hostport = (slashPos == std::string::npos) ? url : url.substr(0, slashPos);
+                        size_t colonPos = hostport.find(':');
+                        if (colonPos != std::string::npos)
+                        {
+                            host = hostport.substr(0, colonPos);
+                            std::string portStr = hostport.substr(colonPos + 1);
+                            try
+                            {
+                                port = std::stoi(portStr);
+                            }
+                            catch (...)
+                            {
+                                port = use_ssl ? 443 : 80;
+                            }
+                        }
+                        else
+                        {
+                            host = hostport;
+                        }
+                    }
+                    catch (...)
+                    {
+                        // Keep defaults
+                    }
 
                     if (use_ssl)
                     {
@@ -94,7 +132,7 @@ namespace open_dtc_server
                             } });
 
                         // Connect to SSL WebSocket (Coinbase Advanced Trade)
-                        bool ws_connected = ssl_websocket_client_->connect("ws-feed.exchange.coinbase.com", 443);
+                        bool ws_connected = ssl_websocket_client_->connect(host, static_cast<uint16_t>(port));
                         if (!ws_connected)
                         {
                             LOG_INFO("[ERROR] Failed to establish SSL WebSocket connection to Coinbase");
@@ -115,7 +153,7 @@ namespace open_dtc_server
                                                                { this->on_level2_received(level2); });
 
                         // Connect to plain WebSocket
-                        bool ws_connected = websocket_client_->connect("ws-feed.exchange.coinbase.com", 80);
+                        bool ws_connected = websocket_client_->connect(host, static_cast<uint16_t>(port));
                         if (!ws_connected)
                         {
                             LOG_INFO("[ERROR] Failed to establish WebSocket connection to Coinbase");

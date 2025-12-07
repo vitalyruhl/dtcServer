@@ -171,3 +171,16 @@
  * - Use conditional compilation (#ifdef _WIN32) for platform-specific code
  * - Docker production stage creates minimal runtime image for Unraid deployment
  */
+/*
+ * Addendum: Inspirations & Strict Separation Enforcement
+ *
+ * Inspirations/References (review first before implementing):
+ *   - https://github.com/anhydrous99/CTrader
+ *   - https://github.com/jusbar23/cbpro-cpp
+ *   - https://github.com/amirphl/orderbook-merger
+ *
+ * Enforcement Reminder:
+ * - Any new GUI feature MUST consume data exclusively via DTC messages produced by the server.
+ * - No GUI-side Coinbase/WebSocket/REST calls are allowed under any circumstances.
+ * - All Coinbase interactions occur in the DTC server, then flow to the GUI over the DTC protocol.
+ */

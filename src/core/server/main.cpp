@@ -44,6 +44,8 @@ int main(int argc, char *argv[])
     std::string credentials_path = "config/cdp_api_key_ECDSA.json"; // Default path
     std::string log_level = "advanced";                             // Default log level
     std::string log_config = "config/logging.ini";                  // Default config path
+    std::string ws_url_override;                                    // Optional WebSocket URL override
+    std::string api_url_override;                                   // Optional REST API URL override
 
     for (int i = 1; i < argc; i++)
     {
@@ -63,6 +65,16 @@ int main(int argc, char *argv[])
             log_config = argv[i + 1];
             i++; // Skip next argument as it's the config path
         }
+        else if (arg == "--ws-url" && i + 1 < argc)
+        {
+            ws_url_override = argv[i + 1];
+            i++;
+        }
+        else if (arg == "--api-url" && i + 1 < argc)
+        {
+            api_url_override = argv[i + 1];
+            i++;
+        }
         else if (arg == "--help" || arg == "-h")
         {
             std::cout << "Usage: " << argv[0] << " [options]\n";
@@ -70,6 +82,8 @@ int main(int argc, char *argv[])
             std::cout << "  --credentials <path>     Path to CDP API credentials file\n";
             std::cout << "  --loglevel <level>       Log level: std, advanced, verbose (default: advanced)\n";
             std::cout << "  --logconfig <path>       Path to logging configuration file (default: config/logging.ini)\n";
+            std::cout << "  --ws-url <url>           Override WebSocket URL (e.g., wss://advanced-trade-ws.coinbase.com)\n";
+            std::cout << "  --api-url <url>          Override REST API URL\n";
             std::cout << "  --help, -h              Show this help message\n";
             std::cout << "\nLog Levels:\n";
             std::cout << "  std        - Only errors and critical messages\n";
@@ -81,7 +95,8 @@ int main(int argc, char *argv[])
 
     // Initialize advanced logging system
     auto &logger = open_dtc_server::util::Logger::getInstance();
-    if (!logger.initialize(log_config))
+    // Initialize using [server] section to avoid writing into GUI log
+    if (!logger.initialize(log_config, "server"))
     {
         std::cerr << "Warning: Could not load logging config, using defaults" << std::endl;
     }
@@ -179,8 +194,8 @@ int main(int argc, char *argv[])
         // Add Coinbase exchange for real market data
         open_dtc_server::exchanges::base::ExchangeConfig coinbase_config;
         coinbase_config.name = "coinbase"; // Must match factory name
-        coinbase_config.websocket_url = "wss://ws-feed.exchange.coinbase.com";
-        coinbase_config.api_url = "https://api.exchange.coinbase.com";
+        coinbase_config.websocket_url = ws_url_override.empty() ? "wss://ws-feed.exchange.coinbase.com" : ws_url_override;
+        coinbase_config.api_url = api_url_override.empty() ? "https://api.exchange.coinbase.com" : api_url_override;
         coinbase_config.port = 443;
         coinbase_config.requires_auth = has_valid_credentials; // Enable auth if we have credentials
 
