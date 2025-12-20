@@ -1,0 +1,25 @@
+{
+    "UpdateVersion":  120,
+    "AllowUpdate":  true,
+    "UpdateFromPath":  "https://raw.githubusercontent.com/vitalyruhl/Win-PS-Autobackuping/master",
+    "UpdateFile":  "backup.ps1",
+    "UpdateVersionFile":  "VersionSettings.json",
+    "Prefix":  "",
+    "Sufix":  "",
+    "CompressIntoTargetPaths":  false,
+    "UseRobocopy":  true,
+    "Parameter":  "/J /MIR /R:2 /W:1 /NP /COMPRESS",
+    "TargetPaths":  [
+                        "P:\\C_PP\\"
+                    ],
+    "Excludes":  [
+                     "node_modules",
+                     "*xvba_debug.log",
+                     "*RECYCLE.BIN",
+                     "SystemVolumeInformation",
+                     "RECYCLER",
+                     "Thumbs.db",
+                     "objects"
+                 ],
+    "AdminRightsRequired":  false
+}
